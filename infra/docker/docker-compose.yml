@@ -1,0 +1,45 @@
+# Pathlight — local development stack (Gate 1, Rev 2)
+# NOTE: service build contexts reference code that doesn't exist yet.
+# Runnable starting Gate 2 (backend), filled in incrementally per gate.
+
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT}:6379"
+
+  # backend:
+  #   build: ../../backend
+  #   env_file: ../../.env
+  #   ports:
+  #     - "${BACKEND_PORT}:8000"
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   volumes:
+  #     - chroma_data:/app/chroma_data
+
+  # frontend:
+  #   build: ../../frontend
+  #   env_file: ../../.env
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - backend
+
+volumes:
+  postgres_data:
+  chroma_data:

@@ -1,0 +1,21 @@
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Python (backend)
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.venv/
+backend/*.egg-info/
+backend/chroma_data/
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
