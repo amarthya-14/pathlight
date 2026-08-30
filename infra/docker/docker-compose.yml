@@ -1,36 +1,34 @@
-# Pathlight — local development stack (Gate 1, Rev 2)
-# NOTE: service build contexts reference code that doesn't exist yet.
-# Runnable starting Gate 2 (backend), filled in incrementally per gate.
+# Pathlight — local development stack (Gate 2, MongoDB)
+# mongo, redis, backend are runnable now. frontend stays commented out until Gate 8.
 
 version: "3.9"
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  mongo:
+    image: mongo:7
     ports:
-      - "${POSTGRES_PORT}:5432"
+      - "27017:27017"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mongo_data:/data/db
 
   redis:
     image: redis:7-alpine
     ports:
       - "${REDIS_PORT}:6379"
 
-  # backend:
-  #   build: ../../backend
-  #   env_file: ../../.env
-  #   ports:
-  #     - "${BACKEND_PORT}:8000"
-  #   depends_on:
-  #     - postgres
-  #     - redis
-  #   volumes:
-  #     - chroma_data:/app/chroma_data
+  backend:
+    build: ../../backend
+    env_file: ../../.env
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+    ports:
+      - "${BACKEND_PORT}:8000"
+    depends_on:
+      - mongo
+      - redis
+    volumes:
+      - chroma_data:/app/chroma_data
+      - uploads_data:/app/data/uploads
 
   # frontend:
   #   build: ../../frontend
@@ -41,5 +39,6 @@ services:
   #     - backend
 
 volumes:
-  postgres_data:
+  mongo_data:
   chroma_data:
+  uploads_data:

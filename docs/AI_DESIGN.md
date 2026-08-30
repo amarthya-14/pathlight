@@ -12,11 +12,21 @@ Implementation starts Gate 4.
 | Resume↔JD similarity | Embeddings + cosine similarity (Chroma) |
 | Skill taxonomy matching | Embeddings first, LLM only for ambiguous ties |
 
-## MCP tool access (new — central from Gate 4)
+## MCP tool access (Filesystem MCP built at Gate 3, central from Gate 4)
 Agents don't call Gmail/GitHub/Calendar APIs directly. They call MCP tools through
-`app/mcp/`, which handles auth, permission scoping, retries, and timeouts uniformly. See
-`ARCHITECTURE.md` §5 for the tool table and failure-handling rule. Every agent result
-includes evidence flags noting whether an expected MCP source was actually available.
+`app/mcp/`, which handles auth, permission scoping, retries, and timeouts uniformly.
+
+**Filesystem MCP (built, Gate 3):** `app/mcp/filesystem_server.py` exposes `list_documents`
+and `read_document`, both scoped to a per-user sandboxed directory (`app/mcp/sandbox.py`
+is the single shared implementation of the path-safety logic — reuse it for any future
+filesystem-touching tool rather than re-implementing sandboxing per tool). Runs in-process
+via MCP's in-memory transport (`app/mcp/filesystem_client.py`), not a subprocess.
+
+**Gmail/GitHub/Calendar MCP:** planned Gate 4/6+, see `ARCHITECTURE.md` §5 for the tool
+table and failure-handling rule.
+
+Every agent result includes evidence flags noting whether an expected MCP source was
+actually available.
 
 ## Non-negotiable rule
 Every agent decision returns `{decision, reason, evidence[], confidence, source, timestamp}`.

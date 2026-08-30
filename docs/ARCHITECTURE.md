@@ -10,6 +10,7 @@ team, and (2) **MCP is now a central architectural pillar**, not a Phase 6 add-o
 |---|---|---|
 | 1 (Gate 1 initial) | Renamed OIE → Pathlight; locked Kafka/K8s/Weaviate/agent-count/single-integration simplifications | See decision table below |
 | 2 (this revision) | Collapsed Spring Boot + FastAPI into a single Python backend; team sections removed; MCP moved to Gate 4 as a core pillar; roadmap resequenced for solo work | Solo execution + MCP-centric goal — see §1 |
+| 3 (post-Gate-2) | PostgreSQL → MongoDB (Beanie ODM); SQLAlchemy relational models → Beanie Documents | Developer familiarity/velocity — see §11 |
 
 ---
 
@@ -39,7 +40,7 @@ documented as the scale-out path") — but are not built.
 
 | # | Original spec | Finalized decision | Rationale |
 |---|---|---|---|
-| 1 | Kafka event queue | **Postgres outbox table → Redis Streams if needed** | Solo, low event volume doesn't justify a cluster |
+| 1 | Kafka event queue | **Mongo outbox collection → Redis Streams if needed** | Solo, low event volume doesn't justify a cluster |
 | 2 | Kubernetes orchestration | **Docker Compose + free-tier PaaS for demo** | No operational benefit at this scale |
 | 3 | Weaviate vector DB | **Chroma (embedded)** | Zero infra to run |
 | 4 | 7 agents | **3 for MVP: Discovery, Eligibility, Skill Gap** | Reliability over agent count |
@@ -73,9 +74,9 @@ tracking, continuously — not a single chatbot turn.
                          │  (tool access, permissioned per agent)     │
                          └──────────┬──────────────────────┬──────────┘
                                     ▼                       ▼
-                              PostgreSQL                  Redis
+                              MongoDB                    Redis
                           (system of record,          (cache, rate
-                           outbox table)                limit, state)
+                          outbox collection)             limit, state)
                                     │
                                     ▼
                                  Chroma
@@ -167,8 +168,9 @@ second person keeping a different gate moving in parallel anymore.
 |---|---|---|
 | 0 | Project Blueprint | Done |
 | 1 | Architecture approved, repo scaffolded (Rev 2: solo + MCP-central) | Done (this doc) |
-| 2 | Database + backend foundation (single FastAPI service, auth, models) | Next |
-| 3 | Document/opportunity ingestion + Filesystem MCP | Pending |
+| 2 | Database + backend foundation (single FastAPI service, auth, models) | Done — see §10 |
+| 3 | Document/opportunity ingestion + Filesystem MCP | Done — see §12 |
+| 4 | First AI pipeline (Discovery via Gmail MCP → Eligibility → Skill Gap) | Next |
 | 4 | First AI pipeline (Discovery via Gmail MCP → Eligibility → Skill Gap) | Pending |
 | 5 | RAG + semantic matching (Chroma) | Pending |
 | 6 | LangGraph full workflow (+ Planner), GitHub/Calendar MCP | Pending |
@@ -187,3 +189,149 @@ team-dependent, so they still stand as written. Only the component architecture,
 choice, MCP timing, and team/roadmap sections are superseded by this revision — see
 `docs/DATABASE.md`, `docs/AI_DESIGN.md`, `docs/DEPLOYMENT.md` for the sections updated to
 match Rev 2.
+
+## 10. Gate 2 — What Was Actually Built
+
+Scope was deliberately narrower than the full entity list in `DATABASE.md`: **User,
+Profile, Company, Opportunity** — enough to prove the full chain (DB → auth → CRUD →
+dedupe) end-to-end. Application/ApplicationStatus and the rest land when a feature
+actually needs them (Gate 3+), not preemptively.
+
+**Implemented:**
+- `app/core/config.py` — pydantic-settings config, reads `.env`
+- `app/core/db.py` — SQLAlchemy engine/session, `Base.metadata.create_all()` used instead
+  of Alembic while the schema is still moving (documented simplification — switch to
+  Alembic before Gate 4, once agent-written data needs a stable schema to land on)
+- `app/core/security.py` — bcrypt password hashing, JWT create/decode
+- `app/models/user.py` — `User`, `Profile` (UUID PKs, 1:1 relationship)
+- `app/models/opportunity.py` — `Company`, `Opportunity`, with a `(company_id, role_hash)`
+  unique constraint enforcing the dedupe rule from Gate 0 §26 at the DB level, not just
+  in application code
+- `app/api/routes/auth.py` — `POST /api/auth/register`, `POST /api/auth/login`
+  (OAuth2 password flow, JWT bearer)
+- `app/api/routes/opportunities.py` — `POST /api/opportunities` (auth-required, dedupe
+  enforced), `GET /api/opportunities` (auth-required, list)
+- `tests/` — 6 tests covering register/login/duplicate-email/wrong-password and
+  create/list/duplicate-opportunity/auth-required, run against an isolated in-memory
+  SQLite DB (no Postgres dependency in CI)
+- `.github/workflows/ci.yml` — runs the backend test suite on every push/PR
+- `infra/docker/docker-compose.yml` — `backend` service is now real (was a commented-out
+  stub)
+
+**Two bugs found and fixed during verification** (both are worth knowing as debugging
+patterns, not just fixed-and-forgotten):
+1. In-memory SQLite (`sqlite:///:memory:`) without `poolclass=StaticPool` gives each
+   connection checkout its own separate database — tables created by `create_all()`
+   vanished before tests could query them. Fixed by pinning the test engine to a single
+   shared connection via `StaticPool`.
+2. `passlib==1.7.4` (unmaintained since 2020) misdetects `bcrypt>=4.1` because bcrypt
+   removed an internal attribute passlib's version-sniffing relies on, causing a false
+   "password cannot be longer than 72 bytes" error on any password. Fixed by pinning
+   `bcrypt==4.0.1` in `requirements.txt`.
+3. Also migrated `@app.on_event("startup")` to FastAPI's `lifespan` context manager
+   (the old pattern is deprecated), and updated the test fixture accordingly.
+
+**Not yet done / explicitly deferred:**
+- Alembic migrations (still using `create_all()`)
+- Refresh tokens (access-token-only for now, 24h expiry)
+- Docker Compose has not been run end-to-end in this environment (no Docker available in
+  the sandbox used to build this) — verified instead via direct app import + full pytest
+  suite against SQLite. Run `docker compose up` yourself before relying on it for a demo.
+
+## 11. Post-Gate-2 — PostgreSQL → MongoDB
+
+**Decision:** switched from PostgreSQL/SQLAlchemy to **MongoDB via Beanie** (an async
+ODM built on Motor + Pydantic).
+
+**Why, honestly:** developer familiarity, not a technical requirement. This is worth
+stating plainly for the viva rather than reverse-engineering a technical justification —
+the original spec calls for PostgreSQL specifically because most of this domain
+(User↔Profile, Application↔ApplicationStatus history, foreign-key relationships) is
+genuinely relational. That reasoning didn't change. What changed is that for a solo
+semester project, being fast and confident in the data layer has real value, and losing
+some relational guarantees is an acceptable trade for that — as long as the guarantees
+that *do* matter (the dedupe constraint) are still enforced at the database level, not
+just hoped for in application code.
+
+**What's preserved despite the switch:**
+- The `(company_id, role_hash)` dedupe constraint is a genuine compound **unique index**
+  in MongoDB, enforced by the database — not just an application-level check. This was
+  verified directly (inserting a duplicate document bypassing the API layer correctly
+  raises `DuplicateKeyError`), not assumed from documentation.
+- The 1:1 `User`↔`Profile` relationship is enforced via a unique index on `Profile.user_id`.
+
+**What's genuinely lost, and the plan for when it matters:**
+- No foreign-key integrity — deleting a `Company` won't cascade or block if `Opportunity`
+  rows still reference it. Acceptable for MVP single-user scale; **must be handled in
+  application code** (check-before-delete or soft-delete) once delete operations exist.
+- `Application`↔`ApplicationStatus` (planned Gate 4+) loses the clean "foreign key +
+  join" pattern. Plan: model `ApplicationStatus` history as an embedded array within the
+  `Application` document (a natural fit for MongoDB's document model, and still
+  append-only if we only ever `$push` to it, never mutate existing entries) rather than
+  as a separate referenced collection — reconsider this specific decision when Gate 4
+  actually builds Application.
+- `Numeric`-precision CGPA storage: MongoDB stores floats, not SQL `Numeric` — fine for a
+  CGPA (2 decimal places, no financial precision requirement), flagged here so it doesn't
+  get silently assumed to have SQL-grade precision if reused elsewhere later.
+
+**A real bug found while switching, worth knowing as a debugging pattern:** Beanie 2.x
+calls `list_collection_names(authorizedCollections=True, nameOnly=True)` during
+initialization — a MongoDB 5.0+ auth-aware call that `mongomock`'s mocked
+`list_collection_names` doesn't support, breaking every test with a `TypeError`. Real
+MongoDB (and the Docker Compose `mongo:7` image) handles this fine; only the *test mock*
+breaks. Fixed by pinning `beanie==1.29.0`, which predates that call. This is the kind of
+version-skew issue that's invisible until you actually run the tests — which is exactly
+why it was caught before being called done, not left for you to discover later.
+
+## 12. Gate 3 — What Was Actually Built
+
+Scope: document ingestion (upload + text-paste) and the **first real MCP integration** —
+a Filesystem MCP server, built and tested standalone before any agent exists to consume
+it (Gate 4).
+
+**Implemented:**
+- `app/models/document.py` — `Document` model (resume/JD/email-paste), owned per-user
+- `app/api/routes/documents.py` — `POST /api/documents/upload` (PDF or plain text, 10MB
+  cap, content-type allowlist), `POST /api/documents/paste` (for forwarded emails/JDs
+  without a file), `GET /api/documents` (list), `GET /api/documents/{id}` (ownership-
+  checked — returns 404, not 403, if the document exists but belongs to someone else, to
+  avoid confirming the ID is valid to an attacker)
+- `app/mcp/sandbox.py` — the **single shared implementation** of path-sandboxing logic
+  (filename sanitization, path-traversal rejection), used by both the REST upload path
+  and the MCP server, so there's exactly one place this security property is enforced
+- `app/mcp/filesystem_server.py` — a real MCP server (FastMCP) exposing `list_documents`
+  and `read_document` tools, scoped per-user
+- `app/mcp/filesystem_client.py` — an in-process MCP client wrapper (`mcp_read_document`,
+  `mcp_list_documents`) used to exercise and test the server before Gate 4's Discovery
+  Agent exists to call it via LangGraph's own MCP adapter
+- `GET /api/auth/me` — added (wasn't in Gate 2 scope) because tests needed a clean way to
+  get the current user's ID; also just a normal thing the frontend will need later
+- 10 new tests (17 total): document upload/paste/auth/ownership, and MCP
+  read/list/path-traversal-rejection/missing-file
+
+**Two things worth knowing, not just fixed silently:**
+1. **MCP tool list-return values arrive in `result.structuredContent`, not as parseable
+   text.** This was verified empirically (see the manual scratch test in this session)
+   before writing `mcp_list_documents` — worth remembering for any future MCP tool that
+   returns a list or object rather than a plain string.
+2. **`anyio`'s `TaskGroup` (used internally by the MCP SDK's in-process transport) wraps
+   exceptions raised inside it in a `BaseExceptionGroup`**, even when there's exactly one
+   underlying exception — so a plain `RuntimeError` raised by a tool doesn't propagate as
+   a plain `RuntimeError` to the caller by default. `filesystem_client.py` unwraps
+   single-exception groups back to the original exception, specifically so future callers
+   (Gate 4 agents) can catch ordinary exceptions without needing to know `anyio`
+   internals. This is the kind of thing that's easy to leave broken if you only run the
+   "happy path" test — the path-traversal-rejection test is exactly what surfaced it.
+
+**Security note carried into Gate 4+:** any future MCP tool that touches the filesystem
+or another sensitive resource should reuse `app/mcp/sandbox.py`'s pattern (one shared,
+tested sandboxing implementation) rather than each tool inventing its own path-safety
+logic — the whole point of standardizing through MCP is undermined if every tool behind
+it has bespoke, unverified security logic.
+
+**Not yet done / explicitly deferred:**
+- Gmail MCP (Gate 4 — this gate only built the Filesystem MCP pattern)
+- The MCP server currently runs in-process via in-memory transport, not as a separate
+  subprocess/service — appropriate for a tool this simple and always-local; revisit if a
+  future MCP tool needs process isolation for a different reason (e.g. running untrusted
+  code).

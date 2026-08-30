@@ -1,0 +1,38 @@
+fastapi==0.115.0
+starlette==0.38.6
+# ^ pinned explicitly: installing `mcp` can pull in a newer starlette as a transitive
+# dependency that breaks fastapi==0.115.0 (which requires starlette<0.39.0). Always
+# reinstall requirements.txt as a whole, don't `pip install mcp` on its own later.
+uvicorn[standard]==0.30.6
+motor==3.7.1
+beanie==1.29.0
+# ^ pinned below the 2.x line: beanie>=2.0 calls list_collection_names(authorizedCollections=...,
+# nameOnly=...) during init, which mongomock's Database.list_collection_names doesn't
+# support (TypeError: unexpected keyword argument). 1.29.0 predates that call and works
+# correctly against both real MongoDB and mongomock-motor. Re-check this pin if/when
+# mongomock adds support for those kwargs.
+pydantic==2.9.2
+email-validator==2.2.0
+pydantic-settings==2.5.2
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+# ^ pinned: passlib 1.7.4 (unmaintained) reads bcrypt.__about__.__version__ to detect
+# the backend version; bcrypt>=4.1 removed that attribute, which makes passlib
+# misdetect the backend and raise a bogus "password cannot be longer than 72 bytes"
+# error even for short passwords. Pinning avoids the whole class of failure.
+python-multipart==0.0.9
+pytest==8.3.3
+pytest-asyncio==0.24.0
+httpx==0.27.2
+mongomock-motor==0.0.36
+# ^ test-only: in-memory Motor-compatible mock so the test suite needs no real MongoDB,
+# same role sqlite:///:memory: played before the Postgres->Mongo switch.
+
+mcp==1.29.1
+# ^ pinned below the 2.x line: mcp>=2.0 renamed FastMCP to MCPServer and restructured
+# the package (mcp.server.fastmcp no longer exists in 2.x). 1.29.1 has the stable
+# FastMCP high-level API this project's Filesystem MCP server is built on.
+
+pypdf==5.9.0
+# ^ PDF text extraction for uploaded resumes/JDs.
