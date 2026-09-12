@@ -8,6 +8,7 @@ app/agents/skill_gap.py's thresholds assume.
 """
 import pytest
 
+from app.agents.skill_gap import MATCH_THRESHOLD, WEAK_THRESHOLD
 from app.retrieval.vector_store import (
     index_resume_chunks,
     query_resume_chunks,
@@ -42,11 +43,11 @@ async def test_distance_thresholds_match_skill_gap_agent_assumptions(client):
 
     weak_hits = await query_resume_chunks("user-2", "Django", n_results=1)
     _, weak_distance = weak_hits[0]
-    assert 0.25 < weak_distance <= 0.45
+    assert MATCH_THRESHOLD < weak_distance <= WEAK_THRESHOLD
 
     missing_hits = await query_resume_chunks("user-2", "AWS", n_results=1)
     _, missing_distance = missing_hits[0]
-    assert missing_distance > 0.45
+    assert missing_distance > WEAK_THRESHOLD
 
 
 async def test_reindexing_same_document_replaces_not_accumulates(client):

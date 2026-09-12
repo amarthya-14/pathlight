@@ -1,19 +1,23 @@
 """
-Opportunity ingestion pipeline (LangGraph) — Discovery -> persist -> Eligibility -> Skill Gap.
+Opportunity ingestion pipeline (LangGraph) — Discovery -> persist -> Eligibility ->
+Skill Gap -> Planner.
 
 Skill Gap was deliberately deferred out of Gate 4 (see docs/ARCHITECTURE.md §13) until
 its actual dependency — Chroma + embeddings — existed, rather than shipping a
-placeholder. It's added here at Gate 5 alongside that infrastructure.
+placeholder. It's added here at Gate 5 alongside that infrastructure. The Planner node
+(Gate 6) is added the same way: right alongside the Preparation Planner Agent it depends
+on (app/agents/planner.py), not before.
 
 Retry policy: each AI-calling step attempts up to MAX_ATTEMPTS times (a plain loop, not
 LangGraph's own retry machinery, to keep this legible) before routing to a
 `needs_human_review` terminal node instead of raising. Every attempt — success or
 failure — is logged via AgentExecution regardless, so a give-up is still fully
-inspectable, not a silent dead end. Skill Gap does not have its own retry loop: it's a
-deterministic-threshold classification over embedding calls, not a structured-output LLM
-call prone to schema-validation failures, so a single attempt is treated as reliable
-enough for this MVP — revisit if Chroma/embedding calls turn out to be flaky in practice.
+inspectable, not a silent dead end. Skill Gap and Planner do not have their own retry
+loop: neither is a structured-output LLM call prone to schema-validation failures (Skill
+Gap is a distance-threshold classification, Planner is pure deterministic computation),
+so a single attempt is treated as reliable enough for this MVP.
 """
+from datetime import datetime, timezone
 from typing import Optional, TypedDict
 
 from beanie import PydanticObjectId
@@ -22,11 +26,14 @@ from pymongo.errors import DuplicateKeyError
 
 from app.agents.discovery import run_discovery
 from app.agents.eligibility import run_eligibility
+from app.agents.planner import DEFAULT_HOURS_PER_DAY, run_planner
 from app.agents.schemas import EligibilityResult, ExtractedOpportunity, SkillGapResult
 from app.agents.skill_gap import run_skill_gap
 from app.core.dedupe import role_hash as compute_role_hash
+from app.mcp.calendar_client import mcp_create_reminder
 from app.models.application import Application, ApplicationStage, ApplicationStatusEvent
 from app.models.opportunity import Company, Opportunity, OpportunityRequirements
+from app.models.preparation import PreparationPlan
 from app.models.user import Profile
 from app.retrieval.vector_store import user_has_indexed_resume
 
@@ -43,6 +50,7 @@ class PipelineState(TypedDict, total=False):
     eligibility: Optional[EligibilityResult]
     skill_gap: Optional[SkillGapResult]
     skill_gap_note: Optional[str]
+    preparation_plan: Optional[PreparationPlan]
     error: Optional[str]
     needs_human_review: bool
 
@@ -184,17 +192,95 @@ async def _skill_gap_node(state: PipelineState) -> PipelineState:
             "against real evidence. Upload a resume to enable this."
         )
 
+    profile = await Profile.find_one(Profile.user_id == PydanticObjectId(state["user_id"]))
+    github_username = profile.github_username if profile else None
+
     skill_gap_result, _execution = await run_skill_gap(
         state["user_id"],
         state["opportunity_id"],
         requirements.required_skills,
         requirements.preferred_skills,
+        github_username=github_username,
     )
     state["skill_gap"] = skill_gap_result
 
     application = await Application.get(PydanticObjectId(state["application_id"]))
     application.skill_gap = skill_gap_result
     await application.save()
+
+    return state
+
+
+async def _planner_node(state: PipelineState) -> PipelineState:
+    skill_gap = state.get("skill_gap")
+    if skill_gap is None or not (skill_gap.missing or skill_gap.weak):
+        # Nothing to prepare for — either Skill Gap didn't run (no skills to check) or
+        # everything's already matched. Not an error, just nothing for this agent to do,
+        # same "no-op when there's nothing to compare" pattern as _skill_gap_node above.
+        return state
+
+    opportunity = await Opportunity.get(PydanticObjectId(state["opportunity_id"]))
+    deadline = opportunity.deadline
+    deadline_aware = None
+    if deadline is not None:
+        deadline_aware = deadline if deadline.tzinfo else deadline.replace(tzinfo=timezone.utc)
+
+    available_hours = None
+    if deadline_aware is not None:
+        now = datetime.now(timezone.utc)
+        days_remaining = max((deadline_aware - now).total_seconds() / 86400, 0)
+        # First-pass estimate only, using a default hours/day assumption — a real value
+        # should come from the user via the preparation-plan API and regenerate this
+        # plan (see app/agents/planner.py's DEFAULT_HOURS_PER_DAY docstring).
+        available_hours = round(days_remaining * DEFAULT_HOURS_PER_DAY, 1)
+
+    plan, _execution = await run_planner(
+        state["user_id"],
+        state["opportunity_id"],
+        state["application_id"],
+        skill_gap.missing,
+        skill_gap.weak,
+        deadline,
+        available_hours,
+    )
+
+    existing = await PreparationPlan.find_one(
+        PreparationPlan.application_id == PydanticObjectId(state["application_id"])
+    )
+    if existing:
+        existing.deadline = plan.deadline
+        existing.available_hours = plan.available_hours
+        existing.total_estimated_hours = plan.total_estimated_hours
+        existing.feasible = plan.feasible
+        existing.tasks = plan.tasks
+        existing.generated_at = plan.generated_at
+        await existing.save()
+        plan = existing
+    else:
+        await plan.insert()
+
+    state["preparation_plan"] = plan
+
+    application = await Application.get(PydanticObjectId(state["application_id"]))
+    application.status_history.append(ApplicationStatusEvent(stage=ApplicationStage.PREPARING))
+    await application.save()
+
+    # Best-effort deadline reminder — an MCP tool failure degrades this step, it never
+    # blocks the pipeline (docs/ARCHITECTURE.md §5's failure principle). No Notification
+    # model exists yet (docs/DATABASE.md lists it as still "Planned"), so there's no
+    # in-app fallback to create here if this fails — just proceed without a reminder.
+    if deadline_aware is not None:
+        try:
+            await mcp_create_reminder(
+                user_id=state["user_id"],
+                title=f"Application deadline: {opportunity.role}",
+                description=f"Preparation plan has {len(plan.tasks)} task(s), "
+                f"{plan.total_estimated_hours}h estimated.",
+                event_time=deadline_aware,
+                application_id=state["application_id"],
+            )
+        except Exception:
+            pass
 
     return state
 
@@ -216,6 +302,7 @@ def build_pipeline():
     graph.add_node("persist_opportunity", _persist_opportunity_node)
     graph.add_node("eligibility", _eligibility_node)
     graph.add_node("skill_gap", _skill_gap_node)
+    graph.add_node("planner", _planner_node)
     graph.add_node("needs_human_review", _needs_human_review_node)
 
     graph.set_entry_point("discovery")
@@ -226,7 +313,8 @@ def build_pipeline():
     )
     graph.add_edge("persist_opportunity", "eligibility")
     graph.add_edge("eligibility", "skill_gap")
-    graph.add_edge("skill_gap", END)
+    graph.add_edge("skill_gap", "planner")
+    graph.add_edge("planner", END)
     graph.add_edge("needs_human_review", END)
 
     return graph.compile()

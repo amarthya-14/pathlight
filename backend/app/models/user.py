@@ -27,6 +27,10 @@ class Profile(Document):
     user_id: Indexed(PydanticObjectId, unique=True)
     cgpa: float | None = None
     branch: str | None = None
+    # Gate 6: optional, used by the Skill Gap Agent as a GitHub MCP evidence lookup key
+    # (see app/mcp/github_server.py). Public username only — no OAuth/private-repo
+    # access exists yet, see that module's scope-decision docstring.
+    github_username: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

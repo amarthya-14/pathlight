@@ -17,11 +17,17 @@ router = APIRouter(prefix="/api/profile", tags=["profile"])
 async def upsert_profile(payload: ProfileUpsert, current_user: User = Depends(get_current_user)):
     profile = await Profile.find_one(Profile.user_id == current_user.id)
     if profile is None:
-        profile = Profile(user_id=current_user.id, cgpa=payload.cgpa, branch=payload.branch)
+        profile = Profile(
+            user_id=current_user.id,
+            cgpa=payload.cgpa,
+            branch=payload.branch,
+            github_username=payload.github_username,
+        )
         await profile.insert()
     else:
         profile.cgpa = payload.cgpa
         profile.branch = payload.branch
+        profile.github_username = payload.github_username
         await profile.save()
     return profile
 
@@ -32,5 +38,5 @@ async def get_profile(current_user: User = Depends(get_current_user)):
     if profile is None:
         # Return id=None rather than a fake ID — "no profile yet" is a normal, expected
         # state (see the eligibility pipeline's UNCERTAIN handling), not an error.
-        return ProfileOut(id=None, user_id=current_user.id, cgpa=None, branch=None)
+        return ProfileOut(id=None, user_id=current_user.id, cgpa=None, branch=None, github_username=None)
     return profile

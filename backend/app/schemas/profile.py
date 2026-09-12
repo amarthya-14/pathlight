@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 class ProfileUpsert(BaseModel):
     cgpa: float | None = None
     branch: str | None = None
+    github_username: str | None = None
 
 
 class ProfileOut(BaseModel):
@@ -13,3 +14,4 @@ class ProfileOut(BaseModel):
     user_id: PydanticObjectId
     cgpa: float | None
     branch: str | None
+    github_username: str | None = None

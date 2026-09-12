@@ -48,7 +48,17 @@ class EligibilityResult(BaseModel):
 
 class SkillGapResult(BaseModel):
     """Skill Gap Agent output (Gate 5). Classification is a plain embedding-distance
-    threshold, not an LLM judgment — see app/agents/skill_gap.py for why."""
+    threshold, not an LLM judgment — see app/agents/skill_gap.py for why.
+
+    github_evidence/github_unavailable (Gate 6): GitHub MCP is a SUPPLEMENTARY evidence
+    source, not a second classifier — it never moves a skill between matched/weak/missing
+    (a repo name matching a skill keyword is too crude a signal to safely override the
+    validated embedding-distance classification). It only surfaces corroborating repos
+    for weak/missing skills, or, per docs/ARCHITECTURE.md §5's MCP failure principle,
+    records that the lookup couldn't be completed at all (github_unavailable) — that's a
+    materially different, more honest state than silently having found nothing."""
     matched: list[str] = Field(default_factory=list)
     weak: list[str] = Field(default_factory=list)
     missing: list[str] = Field(default_factory=list)
+    github_evidence: dict[str, list[str]] = Field(default_factory=dict)
+    github_unavailable: bool = False
