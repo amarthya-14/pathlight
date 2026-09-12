@@ -3,7 +3,9 @@ starlette==0.38.6
 # ^ pinned explicitly: installing `mcp` can pull in a newer starlette as a transitive
 # dependency that breaks fastapi==0.115.0 (which requires starlette<0.39.0). Always
 # reinstall requirements.txt as a whole, don't `pip install mcp` on its own later.
-uvicorn[standard]==0.30.6
+uvicorn[standard]==0.31.1
+# ^ bumped from 0.30.6 (Gate 3): mcp==1.29.1 requires uvicorn>=0.31.1 (same version-skew
+# pattern as the pydantic bump above — mcp's own pins moved since this project pinned).
 motor==3.7.1
 beanie==1.29.0
 # ^ pinned below the 2.x line: beanie>=2.0 calls list_collection_names(authorizedCollections=...,
@@ -11,7 +13,11 @@ beanie==1.29.0
 # support (TypeError: unexpected keyword argument). 1.29.0 predates that call and works
 # correctly against both real MongoDB and mongomock-motor. Re-check this pin if/when
 # mongomock adds support for those kwargs.
-pydantic==2.9.2
+pydantic==2.11.5
+# ^ bumped from 2.9.2 (Gate 3): mcp==1.29.1 now requires pydantic>=2.11.0 on PyPI —
+# this is the same kind of version-skew pip can't warn about ahead of time that broke
+# beanie/bcrypt earlier in this project. 2.11.5 satisfies mcp, beanie (<3.0,>=1.10.18),
+# and pydantic-settings (>=2.7.0); full test suite re-run after this bump, see backend/README.md.
 email-validator==2.2.0
 pydantic-settings==2.5.2
 python-jose[cryptography]==3.3.0
@@ -24,7 +30,9 @@ bcrypt==4.0.1
 python-multipart==0.0.9
 pytest==8.3.3
 pytest-asyncio==0.24.0
-httpx==0.27.2
+httpx==0.28.1
+# ^ bumped from 0.27.2 (Gate 3): google-genai (pulled in by langchain-google-genai)
+# requires httpx>=0.28.1 — same version-skew pattern as pydantic/uvicorn above.
 mongomock-motor==0.0.36
 # ^ test-only: in-memory Motor-compatible mock so the test suite needs no real MongoDB,
 # same role sqlite:///:memory: played before the Postgres->Mongo switch.
