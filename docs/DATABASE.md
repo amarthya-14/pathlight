@@ -16,16 +16,16 @@ versioned upgrades later.
 | Profile | ✅ Implemented | unique index on `user_id` (1:1 with User) — cgpa/branch only so far |
 | Company | ✅ Implemented | unique index on name |
 | Opportunity | ✅ Implemented | **compound unique index** on `(company_id, role_hash)` — verified to reject duplicate inserts at the DB level, not just via application check |
-| Skill / ProfileSkill | Planned (Gate 3+) | needed once Skill Gap Agent exists |
+| Skill / ProfileSkill | Not built — superseded | See note below |
 | ResumeVersion | Planned (Gate 3) | needed for document ingestion |
-| OpportunityRequirement | Planned (Gate 4) | needed for Eligibility Agent |
-| Application | Planned (Gate 4+) | per-user tracking against an Opportunity |
-| ApplicationStatus | Planned (Gate 4+) | **plan changed**: embedded array within the `Application` document (append-only via `$push`) rather than a separate referenced collection — natural fit for MongoDB, revisit if it doesn't hold up |
+| OpportunityRequirement | ✅ Implemented — **as an embedded sub-document**, not a separate collection (see ARCHITECTURE.md §13) | `Opportunity.requirements` |
+| Application | ✅ Implemented | one per `(user_id, opportunity_id)`, compound unique index |
+| ApplicationStatus | ✅ Implemented — embedded array (`Application.status_history`), append-only via `$push` | plan from §11 held up in practice |
 | Deadline | Planned | likely folds into `Opportunity.deadline` rather than a separate document |
 | PreparationPlan / PreparationTask | Planned (Gate 5+) | dependency graph — self-referencing IDs (array of ObjectIds) instead of a self-join |
 | CalendarEvent | Planned (Gate 6+) | tied to Calendar MCP |
 | Notification | Planned | |
-| AgentExecution | Planned (Gate 4) | observability log for every agent run |
+| AgentExecution | ✅ Implemented | logs every Discovery/Eligibility run, success or failure |
 | Document | ✅ Implemented | uploaded resumes/JDs/emails; `storage_filename` is what the Filesystem MCP tool uses to locate the file, not a raw path |
 | Integration | Planned (Gate 4+) | tracks MCP tool connection state per user |
 
@@ -41,3 +41,22 @@ versioned upgrades later.
 
 Full schema documented here as each entity is actually built — not written speculatively
 ahead of the code that needs it.
+
+## Vector store (Chroma, not MongoDB — Gate 5)
+
+The originally planned `Skill`/`ProfileSkill` structured entities were superseded once
+the Skill Gap Agent was actually built: skill matching turned out to be a pure semantic-
+similarity problem better served by embedding the resume's free text directly, rather
+than first extracting a structured skill taxonomy and matching against it. A `resume_chunks`
+collection lives in Chroma (not MongoDB), scoped per-user via metadata:
+
+| Field | Purpose |
+|---|---|
+| `id` | `{document_id}:{chunk_index}` |
+| `embedding` | `gemini-embedding-001` vector |
+| `document` (text) | the chunk's raw text |
+| `metadata.user_id` | scopes queries to one user |
+| `metadata.document_id` | lets re-indexing delete-and-replace a document's old chunks |
+| `metadata.chunk_index` | chunk position within the source document |
+
+See `docs/AI_DESIGN.md`'s RAG pipeline section and `app/retrieval/vector_store.py`.

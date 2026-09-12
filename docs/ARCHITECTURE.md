@@ -170,10 +170,9 @@ second person keeping a different gate moving in parallel anymore.
 | 1 | Architecture approved, repo scaffolded (Rev 2: solo + MCP-central) | Done (this doc) |
 | 2 | Database + backend foundation (single FastAPI service, auth, models) | Done — see §10 |
 | 3 | Document/opportunity ingestion + Filesystem MCP | Done — see §12 |
-| 4 | First AI pipeline (Discovery via Gmail MCP → Eligibility → Skill Gap) | Next |
-| 4 | First AI pipeline (Discovery via Gmail MCP → Eligibility → Skill Gap) | Pending |
-| 5 | RAG + semantic matching (Chroma) | Pending |
-| 6 | LangGraph full workflow (+ Planner), GitHub/Calendar MCP | Pending |
+| 4 | First AI pipeline (Discovery → Eligibility; Skill Gap moved to Gate 5) | Done — see §13 |
+| 5 | RAG + semantic matching (Chroma) + Skill Gap Agent | Done — see §14 |
+| 6 | LangGraph full workflow (+ Planner), GitHub/Calendar MCP | Next |
 | 7 | *(merged into Gate 4/6 — MCP integrations are no longer a separate late gate)* | N/A |
 | 8 | Frontend dashboard | Pending |
 | 9 | Testing + evaluation | Pending |
@@ -335,3 +334,146 @@ it has bespoke, unverified security logic.
   subprocess/service — appropriate for a tool this simple and always-local; revisit if a
   future MCP tool needs process isolation for a different reason (e.g. running untrusted
   code).
+
+## 13. Gate 4 — What Was Actually Built
+
+**Scope correction, stated plainly:** the original Gate 4 description ("Discovery →
+Eligibility → Skill Gap") was internally inconsistent with the roadmap's own Gate 5
+scope ("RAG + semantic matching"). Skill Gap genuinely needs embeddings to do anything
+more than crude keyword overlap, and embeddings/Chroma don't exist until Gate 5. Rather
+than ship a low-quality placeholder Skill Gap agent just to hit a three-agent count,
+**Gate 4 is Discovery + Eligibility only; Skill Gap moves formally to Gate 5**, right next
+to the embeddings infrastructure it actually depends on. This is not a scope cut — it's
+fixing a sequencing mistake in the plan before building around it.
+
+**LLM provider: Gemini**, chosen for developer preference. `app/agents/llm_client.py` is
+the single place the provider is referenced, so swapping later is one file, not a
+codebase-wide change.
+
+**Implemented:**
+- `app/agents/schemas.py` — `ExtractedOpportunity`, `EligibilityResult` (+`EligibilityDecision`
+  enum) — the structured-output contracts every agent decision must satisfy, per
+  `AI_DESIGN.md`'s non-negotiable rule (decision, reason, evidence, missing_information,
+  confidence — never a bare verdict)
+- `app/agents/llm_client.py` — Gemini client factory (`get_small_llm`, `get_strong_llm`),
+  deliberately the *only* place agent code touches the LLM provider directly
+- `app/agents/discovery.py` — extracts `ExtractedOpportunity` from raw text via the small/
+  cheap model; logs an `AgentExecution` on every call, success or failure
+- `app/agents/eligibility.py` — **deterministic rules first, always.** `_deterministic_check`
+  handles hard CGPA/branch cutoffs and missing-data cases without ever calling the LLM;
+  the strong model is only invoked when a qualitative `raw_eligibility_text` still needs
+  interpretation after all structured checks pass. This ordering is verified directly in
+  tests (`test_eligibility_agent.py`) by monkeypatching `get_strong_llm` to raise
+  `AssertionError` if called at all in the deterministic cases — not just checking the
+  returned decision looks right.
+- `app/graphs/opportunity_pipeline.py` — the first real LangGraph workflow: Discovery →
+  persist (Company/Opportunity dedupe, reusing the Gate 2 dedupe logic — see
+  `app/core/dedupe.py`) → Eligibility, with a simple retry-then-`needs_human_review`
+  fallback (2 attempts per AI-calling step, plain loop rather than LangGraph's own retry
+  machinery, to keep a first workflow legible)
+- `app/models/opportunity.py` — extended with an **embedded** `OpportunityRequirements`
+  sub-document (not a separate collection — matches the Mongo-embedding reasoning in §11)
+- `app/models/application.py` — new `Application` model, one per `(user_id, opportunity_id)`
+  enforced by a compound unique index; `status_history` is an embedded, append-only array
+  (`$push` only, per the plan in §11)
+- `app/models/agent_execution.py` — new `AgentExecution` observability log; every agent
+  call is logged regardless of outcome
+- `app/api/routes/profile.py` — minimal Profile upsert/get, added because the Eligibility
+  Agent was otherwise untestable through the API: without it, every user is permanently
+  "profile missing," which the pipeline correctly reports as `UNCERTAIN` rather than
+  guessing, but that's not a useful demo state
+- `app/api/routes/ingest.py` — `POST /api/opportunities/ingest`, the first real caller
+  (outside tests) of both the LangGraph pipeline and the Filesystem MCP tool from Gate 3
+  — accepts either raw text or a `document_id`, and the document path reads content via
+  `mcp_read_document`, not by touching disk directly
+- 20 new tests (37 total): Discovery/Eligibility agent logic (including the
+  never-calls-the-LLM regression tests), full pipeline dedupe/persistence/failure-routing,
+  and API-level ingest tests exercising both the raw-text and document-via-MCP paths
+
+**An honest, unavoidable limitation, stated plainly rather than glossed over:** this
+sandbox's network egress cannot reach `generativelanguage.googleapis.com` — only package
+registries are reachable. Every agent test in this gate uses a fake LLM
+(`tests/fakes.py`) that mimics Gemini's structured-output interface exactly, so all the
+*agent logic* (deterministic-first ordering, retries, schema validation, AgentExecution
+logging, pipeline wiring) is genuinely tested. **None of these tests prove the real
+Gemini API integration works.** Set a real `GOOGLE_API_KEY` and run a manual smoke test
+(`POST /api/opportunities/ingest` with real text) before treating Gate 4 as demo-ready.
+
+**Not yet done / explicitly deferred:**
+- Skill Gap Agent (moved to Gate 5, with embeddings — see scope correction above)
+- Gmail MCP (still Gate 6+ per the original plan — Discovery Agent currently takes text
+  directly or via an uploaded Document, not a live inbox)
+- Merge strategy for re-ingesting an opportunity from a second, less-complete source
+  currently just overwrites `requirements` with the latest extraction — flagged in the
+  code as worth revisiting if this causes surprises in practice
+
+## 14. Gate 5 — What Was Actually Built
+
+Scope: the RAG/embeddings infrastructure this project's model-routing table always
+called for (`docs/AI_DESIGN.md`), plus the Skill Gap Agent that was deliberately deferred
+out of Gate 4 until this existed.
+
+**Implemented:**
+- `app/retrieval/chunking.py` — simple paragraph-aware chunking (pure/deterministic, no
+  DB or network — fully unit-testable on its own)
+- `app/retrieval/embeddings.py` — Gemini embedding client (`gemini-embedding-001`,
+  verified as the current GA text-embedding model, not a retired one — see the same
+  verification discipline applied to the chat models in §13), isolated to one file for
+  the same swap-later reason as `app/agents/llm_client.py`
+- `app/retrieval/vector_store.py` — Chroma wrapper (`resume_chunks` collection, cosine
+  distance explicitly configured — Chroma's default is squared L2, which the Skill Gap
+  Agent's thresholds don't assume), scoped per-user via metadata filtering, with a
+  cheap existence check (`user_has_indexed_resume`) that doesn't require an embedding
+  call just to know whether a user has any resume on file
+- `app/agents/skill_gap.py` — the Skill Gap Agent: a plain distance-threshold
+  classification over embeddings (matched / weak / missing), deliberately **not** an LLM
+  call per skill — cheaper, faster, and more consistent for what is fundamentally a
+  similarity-ranking task, not a reasoning task. This is the one agent in the whole
+  project that genuinely needs embeddings rather than deterministic code or LLM
+  judgment, per the model-routing table this project committed to from the start.
+- Resume indexing wired into the document upload/paste routes (`app/api/routes/documents.py`)
+  — a resume is indexed into Chroma at upload time, not lazily on first Skill Gap run,
+  so the first opportunity ingestion after uploading a resume isn't silently slower
+- `app/graphs/opportunity_pipeline.py` — extended with a third node, Skill Gap, run after
+  Eligibility. If an opportunity has no extracted skills there's nothing to compare, so
+  the node is a no-op (not an error); if the user has no resume indexed at all, every
+  skill is reported `missing` but the pipeline separately surfaces
+  `skill_gap_note: "No resume on file..."` so that's distinguishable from "we checked and
+  found no evidence" rather than silently conflating the two
+- 17 new tests (54 total): chunking (pure logic), vector store (indexing, per-user
+  scoping, re-index-replaces-not-accumulates), Skill Gap Agent classification, and
+  pipeline-level integration tests for all three skill-gap scenarios (matched resume,
+  no resume, no skills to check)
+
+**An empirical verification worth calling out, not just claiming it was done:** the fake
+embedder used in tests (`tests/fakes.py::FakeEmbedder`) was designed with vectors chosen
+by hand-calculated cosine math to land in specific distance ranges (matched, weak,
+missing). Rather than trust that math, `tests/test_vector_store.py` asserts the actual
+distances Chroma returns fall in the predicted ranges — this is what caught whether
+Chroma's cosine distance formula actually matches the assumption the thresholds in
+`app/agents/skill_gap.py` are built on, instead of finding out later.
+
+**The same honest limitation as Gate 4, restated because it applies here too:** this
+sandbox cannot reach Google's embedding API. The fake embedder proves the *retrieval and
+classification logic* is correct (chunking, indexing, per-user scoping, threshold
+classification, pipeline wiring) — it does not prove `gemini-embedding-001` produces
+useful real-world embeddings for skill matching, or that the `MATCH_THRESHOLD`/
+`WEAK_THRESHOLD` values (0.25 / 0.45) are well-calibrated against real embeddings rather
+than just internally consistent with the fake. **Before treating Skill Gap as reliable,**
+run it against a real resume and a handful of known matching/non-matching skills with a
+real `GOOGLE_API_KEY`, and adjust the thresholds if the real distances don't land where
+expected.
+
+**Not yet done / explicitly deferred:**
+- The skill-matching benchmark dataset called for in `docs/EVALUATION.md` (Recall@K,
+  Precision@K) — needed to actually calibrate the thresholds above against real
+  embeddings, not just verify the classification logic works given some distance
+- `job_description_chunks`, `interview_experiences`, `study_resources` collections
+  from the original blueprint — not built, because nothing yet retrieves from them (the
+  Skill Gap Agent only needs `resume_chunks`); adding unused collections would violate
+  the "don't use vector search where nothing needs it yet" principle
+- A minor inefficiency, not a bug: `app/graphs/opportunity_pipeline.py`'s skill_gap node
+  calls `user_has_indexed_resume` once itself (to decide whether to set
+  `skill_gap_note`) and `run_skill_gap` calls it again internally — two cheap
+  metadata-only Chroma lookups instead of one. Left as-is for clarity; worth collapsing
+  if this path gets performance-sensitive later.

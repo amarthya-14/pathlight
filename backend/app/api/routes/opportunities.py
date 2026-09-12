@@ -1,28 +1,20 @@
 """
-Opportunity routes — the first real CRUD vertical slice for Gate 2.
-
-Create is manual-only for now (no Discovery Agent yet — that's Gate 4). Dedupe is
-enforced via the compound unique index on (company_id, role_hash) — see
-app/models/opportunity.py.
+Opportunity routes — manual creation (Gate 2) alongside the Discovery Agent pipeline
+(Gate 4, see app/graphs/opportunity_pipeline.py) which creates Opportunities
+automatically from raw text. Both paths share the same dedupe logic (app/core/dedupe.py)
+and the same DB-level uniqueness guarantee (compound unique index on
+(company_id, role_hash) — see app/models/opportunity.py).
 """
-import hashlib
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.errors import DuplicateKeyError
 
 from app.api.deps import get_current_user
+from app.core.dedupe import role_hash as compute_role_hash
 from app.models.opportunity import Company, Opportunity
 from app.models.user import User
 from app.schemas.opportunity import OpportunityCreate, OpportunityOut
 
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
-
-
-def _role_hash(role: str) -> str:
-    """Normalize + hash the role string for dedupe matching. Deliberately simple for
-    Gate 2 — see docs/ARCHITECTURE.md on duplicate detection for the fuller strategy
-    (embeddings-assisted) planned for later gates."""
-    return hashlib.sha256(role.strip().lower().encode()).hexdigest()
 
 
 @router.post("", response_model=OpportunityOut, status_code=status.HTTP_201_CREATED)
@@ -35,10 +27,10 @@ async def create_opportunity(
         company = Company(name=payload.company_name)
         await company.insert()
 
-    role_hash = _role_hash(payload.role)
+    hashed_role = compute_role_hash(payload.role)
     existing = await Opportunity.find_one(
         Opportunity.company_id == company.id,
-        Opportunity.role_hash == role_hash,
+        Opportunity.role_hash == hashed_role,
     )
     if existing:
         raise HTTPException(
@@ -49,7 +41,7 @@ async def create_opportunity(
     opportunity = Opportunity(
         company_id=company.id,
         role=payload.role,
-        role_hash=role_hash,
+        role_hash=hashed_role,
         deadline=payload.deadline,
         source=payload.source,
     )

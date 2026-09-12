@@ -36,3 +36,22 @@ mcp==1.29.1
 
 pypdf==5.9.0
 # ^ PDF text extraction for uploaded resumes/JDs.
+
+langgraph==1.2.11
+langchain-google-genai==4.3.7
+langchain-core==1.6.1
+# ^ Installing these can transitively pull sse-starlette>=0.49, which conflicts with the
+# starlette pin above — this is a harmless conflict (we never use SSE transport, only
+# in-memory/stdio MCP transports and direct LLM calls), verified by running the full
+# test suite after install. pip will print a dependency-resolver warning; ignore it.
+
+chromadb==1.5.9
+# ^ Vector store for the Skill Gap Agent (Gate 5). IMPORTANT: installing chromadb on top
+# of an existing environment can pull in a newer bcrypt as a transitive dependency and
+# leave TWO bcrypt dist-info directories behind (a corrupted install where metadata says
+# one version but the actual files are another) — this reintroduces the exact passlib
+# "password cannot be longer than 72 bytes" bug the bcrypt==4.0.1 pin above exists to
+# fix. If you see that error after installing/upgrading anything, run:
+#   pip uninstall bcrypt -y && pip install bcrypt==4.0.1 --force-reinstall --no-deps
+# Installing this whole requirements.txt fresh in one pip command (not incrementally)
+# should avoid this, but it's worth knowing the failure mode if it recurs.

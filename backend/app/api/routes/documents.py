@@ -1,8 +1,13 @@
 """
 Document ingestion — file upload (PDF or plain text) and text-paste (for forwarded
 emails / pasted job descriptions), both landing in the same sandboxed uploads directory
-that the Filesystem MCP server reads from (app/mcp/filesystem_server.py), so agents in
-Gate 4 access documents the same way regardless of how they arrived.
+that the Filesystem MCP server reads from (app/mcp/filesystem_server.py), so agents
+access documents the same way regardless of how they arrived.
+
+Resumes are additionally indexed into Chroma (app/retrieval/vector_store.py) at
+upload/paste time, so the Skill Gap Agent (Gate 5) has something to search against as
+soon as a resume exists — not indexed lazily on first Skill Gap run, which would make
+the first ingestion after a resume upload silently slower and harder to reason about.
 """
 import io
 
@@ -14,6 +19,7 @@ from app.api.deps import get_current_user
 from app.mcp.sandbox import sanitize_filename, user_dir
 from app.models.document import Document, DocumentType
 from app.models.user import User
+from app.retrieval.vector_store import index_resume_chunks
 from app.schemas.document import DocumentDetailOut, DocumentOut, DocumentPasteCreate
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -37,6 +43,16 @@ def _extract_text(content_type: str, raw: bytes) -> str | None:
         except Exception:
             return None
     return None
+
+
+async def _index_if_resume(document: Document) -> None:
+    """Indexes a resume's extracted text into Chroma. Silently does nothing for
+    non-resume documents or resumes with no extractable text (e.g. a scanned-image PDF
+    that produced no text) — there's nothing to index, which the Skill Gap Agent already
+    treats as 'no resume evidence' rather than an error (see app/agents/skill_gap.py)."""
+    if document.doc_type != DocumentType.RESUME or not document.extracted_text:
+        return
+    await index_resume_chunks(str(document.owner_id), str(document.id), document.extracted_text)
 
 
 @router.post("/upload", response_model=DocumentDetailOut, status_code=status.HTTP_201_CREATED)
@@ -75,6 +91,7 @@ async def upload_document(
         extracted_text=_extract_text(file.content_type, raw),
     )
     await document.insert()
+    await _index_if_resume(document)
     return document
 
 
@@ -96,6 +113,7 @@ async def paste_document(
         extracted_text=payload.text,
     )
     await document.insert()
+    await _index_if_resume(document)
     return document
 
 
