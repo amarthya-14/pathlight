@@ -6,6 +6,10 @@ real OAuth — see the note below.
 
 ## Implemented
 - AuthN: JWT bearer tokens (access token only, 24h expiry), FastAPI OAuth2 password flow.
+- CORS (Gate 8): `CORSMiddleware` restricts browser-originated requests to the explicit
+  origins in `CORS_ORIGINS` (`.env`, default `http://localhost:3000`) — found missing via
+  real browser testing of the new frontend, not assumed; every request failed at the
+  preflight step until this was added (see `docs/ARCHITECTURE.md` §16).
 - Passwords: bcrypt via passlib (pinned to `bcrypt==4.0.1` — see `ARCHITECTURE.md` §10 for
   why the pin is required).
 - Secrets: env vars only (`.env`, gitignored); `.env.example` documents required keys,

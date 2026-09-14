@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     # purely for higher unauthenticated rate limits, NOT per-user OAuth.
     GITHUB_MCP_TOKEN: str = ""
 
+    # CORS (Gate 8) — the browser blocks cross-origin requests (frontend on :3000,
+    # backend on :8000) without this: a real bug caught by actually driving the new
+    # frontend in a browser, not by pytest (TestClient bypasses CORS entirely — no
+    # existing test could have caught this). Comma-separated origins, matching
+    # NEXT_PUBLIC_API_URL's counterpart on the frontend side (.env.example).
+    CORS_ORIGINS: str = "http://localhost:3000"
+
     model_config = SettingsConfigDict(env_file="../.env", env_file_encoding="utf-8", extra="ignore")
 
 

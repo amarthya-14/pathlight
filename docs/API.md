@@ -19,8 +19,13 @@ GET    /api/profile                           200 -> ProfileOut (id=null if not 
 POST   /api/opportunities/ingest               200 -> IngestResponse | 400 bad request | 404 document not found/owned | 502 needs_human_review (auth required)
 POST   /api/applications/{id}/preparation-plan  200 -> PreparationPlanOut | 400 no skill_gap yet / nothing to plan | 404 not found/owned (auth required) — Gate 6
 GET    /api/applications/{id}/preparation-plan   200 -> PreparationPlanOut | 404 no plan generated yet (auth required) — Gate 6
+GET    /api/applications                          200 -> [ApplicationOut] (auth required) — Gate 8
+GET    /api/applications/{id}                      200 -> ApplicationOut | 404 not found/owned (auth required) — Gate 8
+GET    /api/dashboard/home                          200 -> DashboardHomeOut (auth required) — Gate 8, server-composed aggregation
 GET    /health                                  200 -> {"status": "ok"}
 ```
+
+`ApplicationOut` (Gate 8) is what the frontend actually renders — Opportunity context (company/role/deadline) joined onto the Application, plus its most recent `eligibility`/`skill_gap`/`status_history`. `skill_gap_note` is NOT a stored field: it's recomputed at read time from whether a resume is indexed *right now* (not at ingest time), so a user who uploads a resume after ingesting stops seeing the note on their next fetch without re-running the pipeline.
 Interactive docs available at `/docs` (Swagger UI) once the server is running.
 
 `POST /api/opportunities/ingest` runs the Discovery → Eligibility → Skill Gap → Planner
@@ -48,6 +53,5 @@ this changed when the database switched from PostgreSQL to MongoDB (`ARCHITECTUR
 ```
 GET    /api/opportunities/{id}          # Gate 5+
 PATCH  /api/applications/{id}/status    # Gate 5+ (manual stage updates beyond DISCOVERED/ELIGIBILITY_CHECKED)
-GET    /api/dashboard/home              # Gate 8, server-composed aggregation
 POST   /api/mcp/gmail/connect           # Gate 6+, OAuth handoff for Gmail MCP
 ```
