@@ -174,8 +174,8 @@ second person keeping a different gate moving in parallel anymore.
 | 5 | RAG + semantic matching (Chroma) + Skill Gap Agent | Done — see §14 |
 | 6 | LangGraph full workflow (+ Planner), GitHub/Calendar MCP | Done — see §15 |
 | 7 | *(merged into Gate 4/6 — MCP integrations are no longer a separate late gate)* | N/A |
-| 8 | Frontend dashboard | Next |
-| 9 | Testing + evaluation | Pending |
+| 8 | Frontend dashboard | Done — see §16 |
+| 9 | Testing + evaluation | Next |
 | 10 | Cloud deployment | Pending |
 | 11 | Security + observability | Pending |
 | 12 | Final demonstration | Pending |
@@ -669,3 +669,107 @@ patched and assumed correct:
   a reminder on failure right now (still non-blocking, per §5's failure principle, just
   without the fallback notification §5's table originally imagined).
 - **No frontend yet** to show any of this — Gate 8.
+
+## 16. Gate 8 — What Was Actually Built
+
+Scope: the Next.js dashboard (Home, Opportunities, Preparation, Applications), a typed
+REST client, and — non-negotiable per `docs/AI_DESIGN.md` — every AI-derived value
+rendering its confidence/evidence, never a flattened verdict.
+
+**Backend additions, made because the frontend genuinely couldn't function without
+them:** nothing before this gate let a client fetch an Application's Eligibility/Skill
+Gap/status history *after* ingestion — `IngestResponse` only ever returned it once, at
+ingest time (`docs/API.md`). Added:
+- `GET /api/applications`, `GET /api/applications/{id}` (`app/api/routes/applications.py`)
+  — joins Opportunity/Company context onto each Application. `skill_gap_note` is
+  deliberately NOT a stored field: it's recomputed at read time from whether a resume is
+  indexed *right now*, not frozen from ingest time — a user who uploads a resume after
+  ingesting sees the note disappear on their next fetch without re-running the pipeline
+  (verified directly: `tests/test_applications_routes.py::test_skill_gap_note_recomputed_from_current_resume_state`).
+- `GET /api/dashboard/home` (`app/api/routes/dashboard.py`) — a server-composed
+  aggregation (recent applications, deadlines in the next 14 days, a skill-gap summary
+  via `collections.Counter`), consistent with §1's reasoning for dropping GraphQL: one
+  REST endpoint doing this aggregation is simpler than a GraphQL query or several
+  separate frontend fetches for a screen this shape.
+- Both new route modules share `build_application_out`/`attach_skill_gap_notes`/
+  `fetch_opportunities_and_companies` (defined in `applications.py`, imported by
+  `dashboard.py`) rather than duplicating the same Opportunity/Company join and
+  skill-gap-note logic twice.
+
+**A real, load-bearing bug found only by actually driving the frontend in a browser, not
+by pytest:** every single API call from the browser failed at the CORS preflight step
+(`OPTIONS` → 405) because the backend had no `CORSMiddleware` configured at all.
+`TestClient` (what every backend test uses) doesn't enforce CORS, so 88/88 backend tests
+stayed green throughout while the frontend was 100% non-functional — this is exactly why
+"start the dev server and use the feature in a browser" is a real, separate verification
+step, not a formality redundant with the test suite. Fixed with `CORSMiddleware` in
+`app/main.py`, origins read from a new `CORS_ORIGINS` setting (`.env`, default
+`http://localhost:3000`).
+
+**Frontend stack:** Next.js 16 (App Router) + React 19 + TypeScript 7 + Tailwind CSS 4,
+per the architecture. **No OpenAPI codegen** — a hand-written typed fetch client
+(`frontend/src/lib/api.ts`, `types.ts`) instead, the explicitly-allowed alternative in
+§8's Gate 8 scope; types are kept in sync with `backend/app/schemas/*.py` by hand, with
+no build-time check tying the two together yet (a real, stated gap, not hidden).
+
+**Implemented:**
+- Auth: register/login pages, a JWT stored in `localStorage`, an `AuthProvider` React
+  context (`useAuth`/`useRequireAuth`) that redirects unauthenticated visitors to
+  `/login` and — the reverse case, found while testing — redirects an already-logged-in
+  user away from `/login`/`/register` back to `/` rather than rendering a broken
+  half-dashboard-half-login page (`Shell.tsx` explicitly excludes those two routes from
+  the authenticated sidebar layout regardless of session state).
+- **Home** (`/`): recent applications, deadlines due within 14 days, an aggregate
+  skill-gap summary, and a prominent banner when profile/resume are missing.
+- **Opportunities** (`/opportunities`): the ingest form (calls the real
+  Discovery→Eligibility→Skill Gap→Planner pipeline) plus a list of everything ingested.
+- **Applications** (`/applications`, `/applications/{id}`): a status table and a detail
+  view rendering the full `EligibilityResult`/`SkillGapResult` (decision, reason,
+  evidence, missing_information, confidence — never just a badge, per the non-negotiable
+  rule) and the status-history timeline.
+- **Preparation** (`/applications/{id}/preparation`): fetches the pipeline's
+  auto-generated first-pass plan, or lets the user regenerate it with a real
+  `hours_per_day` via the Gate 6 API — `feasible: null` is rendered as "Unknown", not
+  silently coerced to "Not feasible."
+- **Profile**: CGPA/branch/GitHub-username form, plus a resume paste-and-index form —
+  needed for the eligibility/skill-gap screens to ever show anything but "profile
+  missing"/"no resume on file" in a fresh account.
+- `skill_gap_note` renders in a distinct, prominent amber banner *above* the skill pills
+  (`SkillGapCard`) whenever present — the specific non-negotiable rule
+  `docs/AI_DESIGN.md` calls out by name (don't let a resume-less skill gap render as if
+  it were real evidence).
+
+**Design note:** the first working pass used a dark theme (Tailwind's `dark:` variants
+triggering off `prefers-color-scheme`, not a deliberate choice) — replaced, per explicit
+direction mid-build, with a single light theme (`dark:` variants removed entirely, not
+just overridden) using Vercel's Geist font, a left sidebar (icons via `lucide-react`),
+and a consistent card/stat/badge system (`components/ui.tsx`) rather than restyling each
+page ad hoc.
+
+**Manual verification actually performed** (per this project's "never claim something
+works without running it" rule) — using `mcp__claude-in-chrome__*` browser automation,
+against the real backend + real MongoDB + real Gemini API, not mocked:
+register → login → set profile (CGPA/branch/GitHub username) → paste-and-index a real
+resume → ingest a real JD through the real pipeline → confirmed Eligibility (100%
+confidence, real evidence strings), Skill Gap (FastAPI matched, Python weak,
+Kubernetes/Rust correctly `missing` via the Gate 6 negation guard against a resume
+sentence disclaiming them), the auto-generated Preparation Plan (real hours/day math,
+dependency ordering), and the Applications status timeline (`PREPARING` stage appended
+by the Planner node) — all rendered correctly end-to-end in the browser. Two real bugs
+were found and fixed this way (the CORS gap above, and the dark-theme-by-accident
+issue) — neither would have been caught by `tsc --noEmit` or `next build`, both of which
+stayed clean throughout.
+
+### Not yet done / explicitly deferred
+
+- **Docker Compose's frontend service is still commented out** (`infra/docker/docker-compose.yml`)
+  — a frontend `Dockerfile` and wiring it up is real, straightforward follow-up work,
+  not done in this pass since the user asked to stop before it.
+- **No automated E2E test** (Playwright/Cypress) of the critical path yet — that's
+  explicitly Gate 9 scope (`docs/ARCHITECTURE.md`'s own gate table), and manual browser
+  verification (above) is not a substitute for it, just this gate's interim check.
+- **No OpenAPI-generated client** — the hand-written `types.ts`/`api.ts` pair can drift
+  from `backend/app/schemas/*.py` silently; revisit if this becomes a real source of bugs.
+- **No dashboard route tests for the frontend itself** (component/unit tests) — only the
+  backend routes it calls are tested; the frontend's correctness was verified manually
+  in-browser this gate, not via an automated frontend test suite.
