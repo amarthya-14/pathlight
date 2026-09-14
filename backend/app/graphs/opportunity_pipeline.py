@@ -17,7 +17,7 @@ loop: neither is a structured-output LLM call prone to schema-validation failure
 Gap is a distance-threshold classification, Planner is pure deterministic computation),
 so a single attempt is treated as reliable enough for this MVP.
 """
-from datetime import datetime, timezone
+from datetime import timezone
 from typing import Optional, TypedDict
 
 from beanie import PydanticObjectId
@@ -26,7 +26,7 @@ from pymongo.errors import DuplicateKeyError
 
 from app.agents.discovery import run_discovery
 from app.agents.eligibility import run_eligibility
-from app.agents.planner import DEFAULT_HOURS_PER_DAY, run_planner
+from app.agents.planner import DEFAULT_HOURS_PER_DAY, compute_available_hours, run_planner
 from app.agents.schemas import EligibilityResult, ExtractedOpportunity, SkillGapResult
 from app.agents.skill_gap import run_skill_gap
 from app.core.dedupe import role_hash as compute_role_hash
@@ -225,14 +225,10 @@ async def _planner_node(state: PipelineState) -> PipelineState:
     if deadline is not None:
         deadline_aware = deadline if deadline.tzinfo else deadline.replace(tzinfo=timezone.utc)
 
-    available_hours = None
-    if deadline_aware is not None:
-        now = datetime.now(timezone.utc)
-        days_remaining = max((deadline_aware - now).total_seconds() / 86400, 0)
-        # First-pass estimate only, using a default hours/day assumption — a real value
-        # should come from the user via the preparation-plan API and regenerate this
-        # plan (see app/agents/planner.py's DEFAULT_HOURS_PER_DAY docstring).
-        available_hours = round(days_remaining * DEFAULT_HOURS_PER_DAY, 1)
+    # First-pass estimate only, using a default hours/day assumption — a real value
+    # should come from the user via the preparation-plan API (app/api/routes/preparation.py)
+    # and regenerate this plan (see app/agents/planner.py's DEFAULT_HOURS_PER_DAY docstring).
+    available_hours = compute_available_hours(deadline, DEFAULT_HOURS_PER_DAY)
 
     plan, _execution = await run_planner(
         state["user_id"],

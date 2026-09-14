@@ -172,9 +172,9 @@ second person keeping a different gate moving in parallel anymore.
 | 3 | Document/opportunity ingestion + Filesystem MCP | Done — see §12 |
 | 4 | First AI pipeline (Discovery → Eligibility; Skill Gap moved to Gate 5) | Done — see §13 |
 | 5 | RAG + semantic matching (Chroma) + Skill Gap Agent | Done — see §14 |
-| 6 | LangGraph full workflow (+ Planner), GitHub/Calendar MCP | Next |
+| 6 | LangGraph full workflow (+ Planner), GitHub/Calendar MCP | Done — see §15 |
 | 7 | *(merged into Gate 4/6 — MCP integrations are no longer a separate late gate)* | N/A |
-| 8 | Frontend dashboard | Pending |
+| 8 | Frontend dashboard | Next |
 | 9 | Testing + evaluation | Pending |
 | 10 | Cloud deployment | Pending |
 | 11 | Security + observability | Pending |
@@ -477,3 +477,195 @@ expected.
   `skill_gap_note`) and `run_skill_gap` calls it again internally — two cheap
   metadata-only Chroma lookups instead of one. Left as-is for clarity; worth collapsing
   if this path gets performance-sensitive later.
+
+## 15. Gate 6 — What Was Actually Built
+
+Scope: complete the LangGraph workflow with a Preparation Planner Agent, add GitHub MCP
+(Skill Gap evidence) and Calendar MCP (deadline reminders), per §5/§8. This gate also
+did something no prior gate could: it ran against the **real** Gemini API for the first
+time (see the smoke-test section below) — every agent test through Gate 5 used fakes
+because that development environment couldn't reach Google's API at all.
+
+**Housekeeping before any Gate 6 code:** this repo's git history had stalled at a
+`"gate 3"` commit on the `amarthya-14/pathlight` remote while the actual working tree
+already had Gate 4 and Gate 5 fully built (54 passing tests, matching §13/§14 above) —
+version control had simply fallen behind real progress. Brought back in sync (two
+commits: the Gate 4/5 sync itself, and a separate fix for `requirements.txt`, which
+failed to install at all — `mcp==1.29.1`'s own PyPI pins had moved past this project's
+pins for `pydantic`, `uvicorn`, and `httpx` since they were last set; bumped all three,
+each satisfying every other package's constraints too, re-verified with a full clean
+install and the full test suite).
+
+### Real Gemini API smoke test (first time ever run against the live API)
+
+With a real `GOOGLE_API_KEY` and real network access finally available, every path
+flagged "unverified" in Gates 4 and 5 was actually exercised end-to-end — not just
+unit-tested against fakes — and re-verified again after each fix below, not just
+patched and assumed correct:
+
+1. **`LLM_MODEL_STRONG = "gemini-3.1-pro"` does not exist.** A real ambiguous-eligibility
+   ingest returned a 404 from the real API (`models/gemini-3.1-pro is not found for API
+   version v1beta`) — no prior test caught this because `FakeLLM` doesn't validate model
+   names. Its real successor, `gemini-3.1-pro-preview`, DOES exist (confirmed via
+   `ListModels`), but calling it returned `429 RESOURCE_EXHAUSTED` with `limit: 0` on
+   every quota metric for this project's free-tier key — i.e. the entire
+   `gemini-3.1-pro` family requires a billing-enabled Google account, which this project
+   doesn't have. Moved `LLM_MODEL_STRONG` to `gemini-3.6-flash` (confirmed working,
+   including extended-thinking tokens in the response, and confirmed the
+   ambiguous-eligibility LLM path now completes end-to-end with a sensible `uncertain`
+   decision and 0.85 confidence). `LLM_MODEL_SMALL` (`gemini-3.1-flash-lite`) needed no
+   change — independently confirmed working via a real Discovery extraction.
+2. **Skill Gap's `MATCH_THRESHOLD`/`WEAK_THRESHOLD` (0.25/0.45, chosen by inspection
+   against a fake in Gate 5) were badly wrong against real `gemini-embedding-001`
+   output.** A real resume with clear, explicit skills (Python/FastAPI/PostgreSQL/AWS
+   present; Kubernetes/Rust/Swift explicitly disclaimed: *"No experience with
+   Kubernetes, Rust, or ... Swift"*) produced these real single-skill-vs-resume-chunk
+   cosine distances: FastAPI 0.319, AWS 0.341, Python 0.363, Django 0.358,
+   PostgreSQL 0.375, Machine Learning 0.376, Swift 0.375, Kubernetes 0.352, Rust 0.390,
+   Photography (an unrelated control) 0.442. Two real findings came out of this, not
+   one:
+   - Genuine matches and genuine non-matches overlap almost completely in the
+     0.32–0.39 band for a topically-similar resume — no single global threshold can
+     cleanly separate them. Recalibrated to `MATCH_THRESHOLD = 0.34` /
+     `WEAK_THRESHOLD = 0.42` using this one real example as a **directional signal
+     only** — explicitly not a validated fit. That still requires the labeled
+     benchmark set `docs/EVALUATION.md` already calls for (Gate 9), not more manual
+     tweaking against a single resume.
+   - Embedding distance alone cannot tell *"no experience with Kubernetes"* apart from
+     *"experienced with Kubernetes"* — both chunks contain the word and score
+     similarly close. This is a structural gap, not a miscalibration, so it's fixed
+     separately: `app/agents/skill_gap.py::_skill_explicitly_negated` is a deterministic
+     regex guard on the actual matched chunk text (a few common negation cues — "no",
+     "not", "without", "never", "lacks" — within ~6 words of the skill name) that
+     overrides a matched/weak classification to `missing` regardless of distance. Both
+     fixes were re-verified against the live API (a second real ingest, same resume,
+     different company/skills): Kubernetes and Rust correctly came back `missing`,
+     FastAPI came back `matched`.
+3. Also verified for real, working with no changes needed: Discovery extraction
+   (company/role/CGPA/branches/skills/deadline all parsed correctly from a real JD),
+   Eligibility's deterministic path, the Filesystem MCP-backed document flow, and (new
+   this gate) the Planner Agent and Calendar MCP end-to-end through a real ingest →
+   auto-generated plan → regenerate-with-real-hours-per-day → persisted `CalendarEvent`
+   reminder, all inspected directly in MongoDB, not just trusted from the HTTP response.
+
+### Implemented
+
+- `app/agents/planner.py` — the **Preparation Planner Agent**. Deliberately
+  **deterministic, no LLM call at all** — the same "don't use an agent where
+  deterministic code suffices" discipline already applied to Eligibility's hard checks
+  and Skill Gap's embedding threshold (see `docs/AI_DESIGN.md`). Reasoning, stated
+  plainly: skill-prerequisite relationships (Java → Spring Boot → REST APIs) are
+  common-knowledge, slow-changing domain facts for the tech skills this project
+  realistically deals with — a static lookup table (`SKILL_PREREQUISITES`) plus a
+  topological sort (Kahn's algorithm, `_dependency_order`) is a *complete and correct*
+  answer for any skill in the table, not an approximation an LLM would improve on, and
+  an LLM call here could hallucinate a prerequisite relationship with no way for the
+  user to tell it apart from a real one. For a skill not in the table, there's no
+  reliable evidence at this gate to infer a prerequisite either way — listed as a
+  standalone task rather than guessed, mirroring Eligibility's
+  uncertain-rather-than-guess principle. Effort-hours (`SKILL_EFFORT_HOURS`) and the
+  weak-skill discount (`WEAK_SKILL_EFFORT_MULTIPLIER = 0.4`) are inspection-based
+  heuristics, stated as such, not calibrated data.
+- `app/models/preparation.py` — `PreparationPlan` (top-level Document) /
+  `PreparationTask` (embedded `BaseModel`, per `docs/DATABASE.md`'s planned entry: a
+  **self-referencing ID list** (`depends_on: list[PydanticObjectId]`) for the dependency
+  graph, not a separate graph DB. Each task's ID is generated by the Planner Agent
+  itself at construction time (`PydanticObjectId()`), since Beanie doesn't auto-assign
+  IDs to embedded sub-documents the way it does top-level Documents — needed so
+  `depends_on` can reference sibling tasks before anything is ever persisted.
+- `app/mcp/github_server.py` / `github_client.py` — **GitHub MCP**, read-only.
+  **Scope decision, stated plainly**: §5's table calls for "public repos + explicitly
+  connected private repos." Private-repo access needs a real per-user GitHub OAuth
+  flow, and per `docs/SECURITY.md` **no** MCP tool in this project has a real OAuth flow
+  yet. Building one just for this, without the token-encryption infrastructure Gate 11
+  is supposed to add, would mean either shipping plaintext OAuth tokens or half-building
+  encryption ad hoc under the wrong gate's scope — neither is better than being honest
+  about deferring it. This gate builds public-repo read access only (GitHub's
+  unauthenticated REST API, with an optional shared `GITHUB_MCP_TOKEN` app-level PAT
+  purely for rate limits, **not** per-user OAuth). On any HTTP/network failure the tool
+  raises (one retry with backoff in the client) rather than returning an empty list, so
+  Skill Gap can distinguish "checked, found nothing" from "couldn't check" — and
+  proceeds without blocking either way, per §5's MCP failure principle.
+- `app/agents/skill_gap.py` extended with an optional `github_username` parameter and
+  two new `SkillGapResult` fields: `github_evidence` (skill → matching repo names) and
+  `github_unavailable` (the lookup couldn't be completed at all). GitHub is
+  **supplementary evidence only** — it never moves a skill between matched/weak/missing
+  (a repo-name substring match is too crude a signal to safely override the
+  embedding-distance classification); it's only looked up for weak/missing skills
+  (matched skills already have strong resume evidence), and a single failure
+  short-circuits the rest of that run's lookups rather than retrying N more doomed
+  calls.
+- `app/models/user.py` — `Profile.github_username`, optional, the lookup key for the
+  above.
+- `app/mcp/calendar_server.py` / `calendar_client.py` / `app/models/calendar_event.py` —
+  **Calendar MCP**. **Same scope decision as GitHub MCP, same reasoning**: a real
+  external calendar (Google Calendar, etc.) needs real OAuth, which doesn't exist yet
+  for any tool in this project. So "the dedicated Pathlight calendar" is, for now, an
+  internal `CalendarEvent` collection — real, persisted, queryable, reachable only
+  through the Calendar MCP tool interface — not yet a real external calendar. Swapping
+  in a real Google Calendar API call later is a provider swap behind the same MCP tool
+  interface, the same isolation pattern `app/agents/llm_client.py` and
+  `app/retrieval/embeddings.py` already use for Gemini, not a redesign.
+- `app/graphs/opportunity_pipeline.py` extended with a fourth node, **Planner**, run
+  after Skill Gap: `discovery → persist → eligibility → skill_gap → planner → END`.
+  No-ops (same "nothing to do" pattern as the skill_gap node) if there are no
+  missing/weak skills. Generates a first-pass plan using a default hours/day assumption
+  (`DEFAULT_HOURS_PER_DAY = 2.0`, documented as a placeholder pending a real
+  user-supplied value), persists it (upsert-by-`application_id`, same overwrite-on-
+  regenerate pattern as Opportunity re-ingestion), appends a `PREPARING`
+  `ApplicationStatusEvent`, and — if the opportunity has a deadline — attempts a
+  best-effort Calendar MCP reminder. Planner and Skill Gap both skip the
+  retry/`needs_human_review` machinery: neither is a structured-output LLM call prone
+  to schema-validation failure, so a single attempt is treated as reliable enough for
+  this MVP (documented in the module docstring, same reasoning already applied to
+  Skill Gap in Gate 5).
+- `app/api/routes/preparation.py` — `POST`/`GET /api/applications/{id}/preparation-plan`.
+  `POST` takes a real user-supplied `hours_per_day` and regenerates the plan — the real
+  value path the pipeline's auto-generated first-pass plan is explicitly meant to be
+  replaced by. 400 if the application has no Skill Gap result yet, or nothing
+  missing/weak to plan for; 404 (not 403) if the application doesn't exist or isn't
+  owned by the caller, same anti-enumeration reasoning as `GET /api/documents/{id}`.
+- 26 new tests (80 total): Planner Agent unit tests (prerequisite ordering, unknown-skill
+  fallback, weak-effort discount, feasibility flag, `compute_available_hours`
+  edge cases, and a never-calls-an-LLM test in the same style as Eligibility's), GitHub
+  MCP (mocked HTTP, matched/no-match/failure-propagates), Calendar MCP
+  (create/invalid-time-rejected), Skill Gap's negation guard and GitHub-evidence wiring,
+  pipeline-level Planner/Calendar-reminder tests, and API-level preparation-plan route
+  tests.
+
+### Two things worth knowing as debugging patterns, not just fixed silently
+
+1. **A dict-typed FastMCP tool return does NOT populate `structuredContent`** — unlike a
+   list-typed one (`mcp_list_documents`, Gate 3: `structuredContent["result"]`), a
+   dict-typed return (`create_reminder`) arrives as a JSON string in
+   `result.content[0].text` with `structuredContent` left `None`. Verified empirically
+   with a throwaway script before trusting it (same discipline as Gate 3's list-typed
+   finding) — `calendar_client.py::mcp_create_reminder` `json.loads`s the text block
+   instead. A list-of-dicts return (`search_repos_for_skill`) turned out to match the
+   list-typed behavior, also checked directly rather than assumed by extension.
+2. **MongoDB's database names are case-insensitive for collision purposes even though
+   they're stored case-sensitively.** The local dev `mongod` used for this gate's smoke
+   test already had a `PathLight` database from earlier manual testing; pointing
+   `MONGO_DB_NAME` at `pathlight` (lowercase) failed at Beanie init with
+   `OperationFailure: db already exists with different case`. Not a code bug — worked
+   around by using a distinctly-named local database (`pathlight_gate6`) rather than
+   touching whatever was already in `PathLight`. Worth knowing if a fresh
+   `docker compose` Mongo volume isn't being used for local testing.
+
+### Not yet done / explicitly deferred
+
+- **Private-repo GitHub access and a real external Calendar (Google Calendar API)** —
+  both need real per-user OAuth, which no MCP tool in this project has yet. Building
+  either now, ahead of Gate 11's token-encryption work, would mean shipping plaintext
+  tokens; deferred on purpose, not forgotten. See both modules' scope-decision
+  docstrings.
+- **Skill Gap's recalibrated thresholds are a directional fix from ONE real resume**,
+  not a validated calibration — the real fix is still the labeled benchmark dataset
+  `docs/EVALUATION.md` calls for (Gate 9).
+- **No per-task due-date scheduling within a plan** — only a plan-level total-hours/
+  feasibility check against the deadline. A deliberate MVP scope cut, not an oversight.
+- **No in-app notification fallback if the Calendar MCP reminder fails** — `Notification`
+  is still listed as "Planned" in `docs/DATABASE.md`; the pipeline just proceeds without
+  a reminder on failure right now (still non-blocking, per §5's failure principle, just
+  without the fallback notification §5's table originally imagined).
+- **No frontend yet** to show any of this — Gate 8.

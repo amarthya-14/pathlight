@@ -1,6 +1,6 @@
 # Database Design
 
-**Status:** Gate 2 subset implemented and tested (MongoDB, switched from the originally
+**Status:** Through Gate 6 implemented and tested (MongoDB, switched from the originally
 planned PostgreSQL — see `ARCHITECTURE.md` §11 for the honest reasoning and trade-offs).
 
 ORM: **Beanie** (async ODM on Motor + Pydantic). Collections/indexes are created/ensured
@@ -13,7 +13,7 @@ versioned upgrades later.
 | Entity | Status | Notes |
 |---|---|---|
 | User | ✅ Implemented | unique index on email, bcrypt hash |
-| Profile | ✅ Implemented | unique index on `user_id` (1:1 with User) — cgpa/branch only so far |
+| Profile | ✅ Implemented | unique index on `user_id` (1:1 with User) — cgpa/branch/`github_username` (Gate 6, GitHub MCP evidence key) |
 | Company | ✅ Implemented | unique index on name |
 | Opportunity | ✅ Implemented | **compound unique index** on `(company_id, role_hash)` — verified to reject duplicate inserts at the DB level, not just via application check |
 | Skill / ProfileSkill | Not built — superseded | See note below |
@@ -22,9 +22,9 @@ versioned upgrades later.
 | Application | ✅ Implemented | one per `(user_id, opportunity_id)`, compound unique index |
 | ApplicationStatus | ✅ Implemented — embedded array (`Application.status_history`), append-only via `$push` | plan from §11 held up in practice |
 | Deadline | Planned | likely folds into `Opportunity.deadline` rather than a separate document |
-| PreparationPlan / PreparationTask | Planned (Gate 5+) | dependency graph — self-referencing IDs (array of ObjectIds) instead of a self-join |
-| CalendarEvent | Planned (Gate 6+) | tied to Calendar MCP |
-| Notification | Planned | |
+| PreparationPlan / PreparationTask | ✅ Implemented (Gate 6) | `app/models/preparation.py` — dependency graph via self-referencing IDs (`PreparationTask.depends_on: list[PydanticObjectId]`), not a self-join; `PreparationTask` is an embedded `BaseModel`, not its own Document (no independent query pattern) |
+| CalendarEvent | ✅ Implemented (Gate 6) | `app/models/calendar_event.py` — tied to Calendar MCP; internal collection standing in for a real external calendar until real OAuth exists (see `docs/ARCHITECTURE.md` §15) |
+| Notification | Planned | still nothing writes to this — e.g. a failed Calendar MCP reminder in the pipeline currently has no in-app fallback to create here |
 | AgentExecution | ✅ Implemented | logs every Discovery/Eligibility run, success or failure |
 | Document | ✅ Implemented | uploaded resumes/JDs/emails; `storage_filename` is what the Filesystem MCP tool uses to locate the file, not a raw path |
 | Integration | Planned (Gate 4+) | tracks MCP tool connection state per user |

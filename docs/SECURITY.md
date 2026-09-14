@@ -1,6 +1,8 @@
 # Security Model
 
-**Status:** Core auth implemented at Gate 2; MCP/OAuth and rate limiting are still planned.
+**Status:** Core auth implemented at Gate 2; MCP/OAuth and rate limiting are still
+planned. GitHub and Calendar MCP were added at Gate 6, but both deliberately **without**
+real OAuth — see the note below.
 
 ## Implemented
 - AuthN: JWT bearer tokens (access token only, 24h expiry), FastAPI OAuth2 password flow.
@@ -21,6 +23,15 @@
 - AuthZ: role-based (STUDENT now; no other roles needed for solo MVP).
 - MCP/OAuth tokens (Gmail, GitHub, Calendar): encrypted at rest, never logged, scoped to
   least-privilege access — implemented alongside each MCP tool starting Gate 4.
+  **Scope decision at Gate 6, stated plainly**: GitHub MCP and Calendar MCP were built
+  this gate, but *without* real per-user OAuth — GitHub is read-only public-repo access
+  via an optional shared app-level PAT (not a per-user token), and Calendar MCP writes
+  to an internal `CalendarEvent` collection rather than calling a real external calendar
+  API. Building real OAuth for either now, ahead of this section's own token-encryption
+  work, would mean shipping plaintext per-user tokens — worse than deferring both
+  cleanly. See `docs/ARCHITECTURE.md` §15 for the full reasoning. Encrypting real OAuth
+  tokens remains Gate 11 scope, to be built when real OAuth flows actually exist for
+  something.
 - Rate limiting: Redis-backed token bucket on public/auth endpoints.
 - All LLM-produced structured output schema-validated before being trusted (principle
   locked in `AI_DESIGN.md`; enforced once agents exist at Gate 4).

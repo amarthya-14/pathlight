@@ -24,7 +24,7 @@ not reaching for an LLM to paper over missing domain data.
 """
 import time
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
 
 from beanie import PydanticObjectId
 
@@ -93,6 +93,22 @@ DEFAULT_HOURS_PER_DAY = 2.0
 
 def _normalize(skill: str) -> str:
     return skill.strip().lower()
+
+
+def compute_available_hours(deadline: datetime | None, hours_per_day: float) -> float | None:
+    """
+    Converts a deadline + a days/day budget into a total available-hours figure, clamped
+    to 0 for a deadline already in the past (still a valid, informative "0 hours left"
+    answer, not an error). Shared by the pipeline's first-pass auto-plan (using
+    DEFAULT_HOURS_PER_DAY) and the preparation-plan API route (using a real user-supplied
+    hours_per_day) so this calculation exists in exactly one place.
+    """
+    if deadline is None:
+        return None
+    deadline_aware = deadline if deadline.tzinfo else deadline.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    days_remaining = max((deadline_aware - now).total_seconds() / 86400, 0)
+    return round(days_remaining * hours_per_day, 1)
 
 
 def _dependency_order(skills: list[str]) -> list[str]:

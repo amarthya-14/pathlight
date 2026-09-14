@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.core.db import init_db
-from app.api.routes import auth, opportunities, documents, profile, ingest
+from app.api.routes import auth, opportunities, documents, profile, ingest, preparation
 
 
 @asynccontextmanager
@@ -27,6 +27,7 @@ app.include_router(opportunities.router)
 app.include_router(documents.router)
 app.include_router(profile.router)
 app.include_router(ingest.router)
+app.include_router(preparation.router)
 
 
 @app.get("/health")
