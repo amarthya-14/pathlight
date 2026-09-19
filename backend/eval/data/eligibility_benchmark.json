@@ -1,0 +1,162 @@
+[
+  {
+    "id": "e01",
+    "note": "Hard fail: CGPA below minimum",
+    "profile": {"cgpa": 6.5, "branch": "CSE"},
+    "requirements": {"min_cgpa": 8.0, "allowed_branches": null, "raw_eligibility_text": null},
+    "expected_decision": "not_eligible",
+    "expect_llm_call": false
+  },
+  {
+    "id": "e02",
+    "note": "Hard fail: branch not in allowed list",
+    "profile": {"cgpa": 9.0, "branch": "CSE"},
+    "requirements": {"min_cgpa": null, "allowed_branches": ["ECE", "EEE"], "raw_eligibility_text": null},
+    "expected_decision": "not_eligible",
+    "expect_llm_call": false
+  },
+  {
+    "id": "e03",
+    "note": "Missing profile CGPA when a CGPA requirement exists",
+    "profile": {"cgpa": null, "branch": "CSE"},
+    "requirements": {"min_cgpa": 7.0, "allowed_branches": null, "raw_eligibility_text": null},
+    "expected_decision": "uncertain",
+    "expect_llm_call": false
+  },
+  {
+    "id": "e04",
+    "note": "Missing profile branch when a branch requirement exists",
+    "profile": {"cgpa": 8.0, "branch": null},
+    "requirements": {"min_cgpa": null, "allowed_branches": ["CSE", "IT"], "raw_eligibility_text": null},
+    "expected_decision": "uncertain",
+    "expect_llm_call": false
+  },
+  {
+    "id": "e05",
+    "note": "Both profile fields missing when both requirements exist",
+    "profile": {"cgpa": null, "branch": null},
+    "requirements": {"min_cgpa": 7.0, "allowed_branches": ["CSE"], "raw_eligibility_text": null},
+    "expected_decision": "uncertain",
+    "expect_llm_call": false
+  },
+  {
+    "id": "e06",
+    "note": "Deterministic pass, no qualitative text at all",
+    "profile": {"cgpa": 8.5, "branch": "IT"},
+    "requirements": {"min_cgpa": 7.0, "allowed_branches": ["CSE", "IT"], "raw_eligibility_text": null},
+    "expected_decision": "eligible",
+    "expect_llm_call": false
+  },
+  {
+    "id": "e07",
+    "note": "Deterministic pass + a qualitative trait requirement (problem-solving skills) the profile schema has no field to verify",
+    "profile": {"cgpa": 8.0, "branch": "CSE"},
+    "requirements": {
+      "min_cgpa": 7.0,
+      "allowed_branches": ["CSE"],
+      "raw_eligibility_text": "We value strong problem-solving skills and a willingness to learn."
+    },
+    "expected_decision": "uncertain",
+    "expect_llm_call": true
+  },
+  {
+    "id": "e08",
+    "note": "No structured requirements at all; qualitative text demands evidence the profile schema can't supply",
+    "profile": {"cgpa": 7.9, "branch": "CSE"},
+    "requirements": {
+      "min_cgpa": null,
+      "allowed_branches": null,
+      "raw_eligibility_text": "We evaluate primarily on your GitHub activity and personal projects, not your resume."
+    },
+    "expected_decision": "uncertain",
+    "expect_llm_call": true
+  },
+  {
+    "id": "e09",
+    "note": "Deterministic pass + a qualitative hard disqualifier profile can't confirm either way",
+    "profile": {"cgpa": 8.2, "branch": "ECE"},
+    "requirements": {
+      "min_cgpa": 7.0,
+      "allowed_branches": ["ECE"],
+      "raw_eligibility_text": "No active backlogs are allowed at the time of application."
+    },
+    "expected_decision": "uncertain",
+    "expect_llm_call": true
+  },
+  {
+    "id": "e10",
+    "note": "Boundary: CGPA exactly equal to minimum, plus supportive text",
+    "profile": {"cgpa": 7.0, "branch": "IT"},
+    "requirements": {
+      "min_cgpa": 7.0,
+      "allowed_branches": ["IT"],
+      "raw_eligibility_text": "Communication skills are heavily weighted in the interview."
+    },
+    "expected_decision": "eligible",
+    "expect_llm_call": true
+  },
+  {
+    "id": "e11",
+    "note": "No CGPA requirement set at all (so a null profile CGPA is not 'missing'); branch matches",
+    "profile": {"cgpa": null, "branch": "CSE"},
+    "requirements": {
+      "min_cgpa": null,
+      "allowed_branches": ["CSE"],
+      "raw_eligibility_text": "We care about taste and iteration speed, not your transcript."
+    },
+    "expected_decision": "eligible",
+    "expect_llm_call": true
+  },
+  {
+    "id": "e12",
+    "note": "Hard fail on both CGPA and branch simultaneously",
+    "profile": {"cgpa": 5.0, "branch": "Mechanical"},
+    "requirements": {"min_cgpa": 7.5, "allowed_branches": ["CSE", "IT"], "raw_eligibility_text": null},
+    "expected_decision": "not_eligible",
+    "expect_llm_call": false
+  },
+  {
+    "id": "e13",
+    "note": "Deterministic pass, raw_eligibility_text is an empty string (falsy, should be treated as absent)",
+    "profile": {"cgpa": 9.1, "branch": "CSE"},
+    "requirements": {"min_cgpa": 7.0, "allowed_branches": ["CSE"], "raw_eligibility_text": ""},
+    "expected_decision": "eligible",
+    "expect_llm_call": false
+  },
+  {
+    "id": "e14",
+    "note": "Missing branch takes precedence over qualitative text (missing check happens before LLM handoff)",
+    "profile": {"cgpa": 8.0, "branch": null},
+    "requirements": {
+      "min_cgpa": 7.0,
+      "allowed_branches": ["CSE", "IT"],
+      "raw_eligibility_text": "We value strong problem-solving skills."
+    },
+    "expected_decision": "uncertain",
+    "expect_llm_call": false
+  },
+  {
+    "id": "e15",
+    "note": "Qualitative text restates an already-structurally-verified branch requirement in prose",
+    "profile": {"cgpa": 7.8, "branch": "ECE"},
+    "requirements": {
+      "min_cgpa": 7.0,
+      "allowed_branches": ["CSE", "IT", "ECE"],
+      "raw_eligibility_text": "Only candidates from CSE, IT, or ECE branches will be considered, no exceptions."
+    },
+    "expected_decision": "eligible",
+    "expect_llm_call": true
+  },
+  {
+    "id": "e16",
+    "note": "Qualitative text demands a specific certification the profile has no field for",
+    "profile": {"cgpa": 7.4, "branch": "CSE"},
+    "requirements": {
+      "min_cgpa": 7.0,
+      "allowed_branches": ["CSE"],
+      "raw_eligibility_text": "Candidates must hold a valid AWS Solutions Architect certification."
+    },
+    "expected_decision": "uncertain",
+    "expect_llm_call": true
+  }
+]

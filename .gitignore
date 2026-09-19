@@ -12,6 +12,7 @@ backend/*.egg-info/
 backend/chroma_data/
 backend/.pytest_cache/
 backend/data/
+backend/.coverage
 
 # Node / Next.js
 frontend/node_modules/

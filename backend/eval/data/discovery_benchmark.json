@@ -1,0 +1,290 @@
+[
+  {
+    "id": "d01",
+    "source": "email",
+    "raw_text": "Subject: On-Campus Drive - Innotech Systems (SDE-1)\n\nDear Students,\n\nInnotech Systems will be visiting campus for the SDE-1 role. Eligibility: CGPA >= 7.5, open to CSE and IT branches only. CTC offered is 14 LPA. Required skills: Java, Spring Boot, SQL. Preferred: Docker, Kubernetes. Last date to apply is 2026-10-12.\n\nPlacement Cell",
+    "expected": {
+      "company_name": "Innotech Systems",
+      "role": "SDE-1",
+      "deadline": "2026-10-12",
+      "min_cgpa": 7.5,
+      "allowed_branches": ["CSE", "IT"],
+      "required_skills": ["Java", "Spring Boot", "SQL"],
+      "preferred_skills": ["Docker", "Kubernetes"],
+      "compensation": "14 LPA",
+      "raw_eligibility_text": null
+    }
+  },
+  {
+    "id": "d02",
+    "source": "job_description",
+    "raw_text": "Backend Engineer - Quanta Labs\n\nWe're looking for a Backend Engineer to join our small team. You'll work primarily in Python with FastAPI, and should be comfortable with PostgreSQL. Experience with AWS is a plus. We value strong problem-solving skills and a willingness to learn over specific years of experience, so we don't have a strict CGPA cutoff.\n\nCompensation is competitive and will be discussed during the interview process. Apply by end of November 2026.",
+    "expected": {
+      "company_name": "Quanta Labs",
+      "role": "Backend Engineer",
+      "deadline": "2026-11-30",
+      "min_cgpa": null,
+      "allowed_branches": null,
+      "required_skills": ["Python", "FastAPI", "PostgreSQL"],
+      "preferred_skills": ["AWS"],
+      "compensation": "competitive",
+      "raw_eligibility_text": "We value strong problem-solving skills and a willingness to learn over specific years of experience, so we don't have a strict CGPA cutoff."
+    }
+  },
+  {
+    "id": "d03",
+    "source": "email",
+    "raw_text": "Fwd: Placement Notice - Vertex Analytics (Data Analyst Intern)\n\nHi all, forwarding this from the T&P cell.\n\nVertex Analytics is hiring Data Analyst Interns. Branches: CSE, IT, ECE. Minimum CGPA required: 6.5. Skills needed: SQL, Excel, Python. Nice to have: Power BI, Tableau. Stipend: 25,000/month. Deadline for applications: 20th September 2026.",
+    "expected": {
+      "company_name": "Vertex Analytics",
+      "role": "Data Analyst Intern",
+      "deadline": "2026-09-20",
+      "min_cgpa": 6.5,
+      "allowed_branches": ["CSE", "IT", "ECE"],
+      "required_skills": ["SQL", "Excel", "Python"],
+      "preferred_skills": ["Power BI", "Tableau"],
+      "compensation": "25,000/month",
+      "raw_eligibility_text": null
+    }
+  },
+  {
+    "id": "d04",
+    "source": "job_description",
+    "raw_text": "Frontend Developer @ Bramble Co.\n\nJoin our design-focused product team. Must know React and TypeScript deeply, and have a good eye for UI detail (we'll look at your portfolio, not just your resume). CSS/Tailwind experience preferred. No CGPA requirement — we hire based on a take-home project. Open to all branches.\n\nRolling applications, no fixed deadline.",
+    "expected": {
+      "company_name": "Bramble Co.",
+      "role": "Frontend Developer",
+      "deadline": null,
+      "min_cgpa": null,
+      "allowed_branches": null,
+      "required_skills": ["React", "TypeScript"],
+      "preferred_skills": ["CSS", "Tailwind"],
+      "compensation": null,
+      "raw_eligibility_text": "We'll look at your portfolio, not just your resume, and hire based on a take-home project."
+    }
+  },
+  {
+    "id": "d05",
+    "source": "email",
+    "raw_text": "PLACEMENT ALERT: Castlewood Financial - Associate Software Engineer\n\nEligibility: B.Tech CSE/ECE/EEE, CGPA 8.0 and above ONLY. No backlogs allowed at the time of application. Package: 18 LPA base + performance bonus. Core skills expected: C++, Data Structures, Algorithms, Operating Systems. Apply before 05/10/2026.",
+    "expected": {
+      "company_name": "Castlewood Financial",
+      "role": "Associate Software Engineer",
+      "deadline": "2026-10-05",
+      "min_cgpa": 8.0,
+      "allowed_branches": ["CSE", "ECE", "EEE"],
+      "required_skills": ["C++", "Data Structures", "Algorithms", "Operating Systems"],
+      "preferred_skills": [],
+      "compensation": "18 LPA base + performance bonus",
+      "raw_eligibility_text": "No backlogs allowed at the time of application."
+    }
+  },
+  {
+    "id": "d06",
+    "source": "job_description",
+    "raw_text": "Machine Learning Intern - Solara AI\n\nWe're a small research-driven startup. Looking for someone with solid fundamentals in Python and PyTorch, and ideally some exposure to NLP. You should genuinely enjoy reading papers and reimplementing ideas — that curiosity matters more to us than your GPA. Unpaid but comes with a strong recommendation letter and possible PPO. Apply anytime, we review on a rolling basis.",
+    "expected": {
+      "company_name": "Solara AI",
+      "role": "Machine Learning Intern",
+      "deadline": null,
+      "min_cgpa": null,
+      "allowed_branches": null,
+      "required_skills": ["Python", "PyTorch"],
+      "preferred_skills": ["NLP"],
+      "compensation": "Unpaid",
+      "raw_eligibility_text": "You should genuinely enjoy reading papers and reimplementing ideas — that curiosity matters more to us than your GPA."
+    }
+  },
+  {
+    "id": "d07",
+    "source": "email",
+    "raw_text": "Campus Drive Notification - Redgate Systems (DevOps Engineer)\n\nAll branches eligible. CGPA cutoff: 7.0. Required: Linux, Docker, Kubernetes, CI/CD (Jenkins or GitHub Actions). AWS or GCP experience preferred. CTC: 16 LPA. Application closes 2026-12-01.",
+    "expected": {
+      "company_name": "Redgate Systems",
+      "role": "DevOps Engineer",
+      "deadline": "2026-12-01",
+      "min_cgpa": 7.0,
+      "allowed_branches": null,
+      "required_skills": ["Linux", "Docker", "Kubernetes", "CI/CD"],
+      "preferred_skills": ["AWS", "GCP"],
+      "compensation": "16 LPA",
+      "raw_eligibility_text": null
+    }
+  },
+  {
+    "id": "d08",
+    "source": "job_description",
+    "raw_text": "QA Automation Engineer - Northwind Retail\n\nWe need someone to build out our automated test suite. Selenium and Python required. Experience with pytest is a strong plus. Open to CSE, IT, and Mechanical (if you can code). CGPA requirement: 6.0. Salary: 8 LPA. Apply by January 15, 2027.",
+    "expected": {
+      "company_name": "Northwind Retail",
+      "role": "QA Automation Engineer",
+      "deadline": "2027-01-15",
+      "min_cgpa": 6.0,
+      "allowed_branches": ["CSE", "IT", "Mechanical"],
+      "required_skills": ["Selenium", "Python"],
+      "preferred_skills": ["pytest"],
+      "compensation": "8 LPA",
+      "raw_eligibility_text": null
+    }
+  },
+  {
+    "id": "d09",
+    "source": "email",
+    "raw_text": "Hi team, sharing an opportunity from Bluepeak Robotics for an Embedded Systems role. They didn't mention a CGPA cutoff explicitly, just said 'strong fundamentals in C and microcontrollers.' Branches: ECE, EEE only. Skills: C, Embedded C, ARM microcontrollers. RTOS knowledge preferred. No fixed CTC mentioned yet, to be discussed in interview. Deadline: 2026-11-05.",
+    "expected": {
+      "company_name": "Bluepeak Robotics",
+      "role": "Embedded Systems",
+      "deadline": "2026-11-05",
+      "min_cgpa": null,
+      "allowed_branches": ["ECE", "EEE"],
+      "required_skills": ["C", "Embedded C", "ARM microcontrollers"],
+      "preferred_skills": ["RTOS"],
+      "compensation": null,
+      "raw_eligibility_text": "Strong fundamentals in C and microcontrollers."
+    }
+  },
+  {
+    "id": "d10",
+    "source": "job_description",
+    "raw_text": "Product Design Intern - Orchard Studio\n\nLooking for a design intern who can work in Figma and has a decent portfolio of UI work. We care about taste and iteration speed, not branch or CGPA — literally anyone can apply, including non-CS branches. Stipend: 15k/month. Apply by 2026-10-30.",
+    "expected": {
+      "company_name": "Orchard Studio",
+      "role": "Product Design Intern",
+      "deadline": "2026-10-30",
+      "min_cgpa": null,
+      "allowed_branches": null,
+      "required_skills": ["Figma"],
+      "preferred_skills": [],
+      "compensation": "15k/month",
+      "raw_eligibility_text": "We care about taste and iteration speed, not branch or CGPA — literally anyone can apply, including non-CS branches."
+    }
+  },
+  {
+    "id": "d11",
+    "source": "email",
+    "raw_text": "URGENT: Placement Drive Tomorrow - Sterling Cloud (Cloud Support Engineer)\n\nEligibility: CGPA 6.5+, CSE/IT/ECE. Must know Linux basics and at least one of AWS/Azure/GCP. Networking fundamentals preferred. Package 10 LPA. LAST DATE TODAY 2026-09-19.",
+    "expected": {
+      "company_name": "Sterling Cloud",
+      "role": "Cloud Support Engineer",
+      "deadline": "2026-09-19",
+      "min_cgpa": 6.5,
+      "allowed_branches": ["CSE", "IT", "ECE"],
+      "required_skills": ["Linux", "AWS", "Azure", "GCP"],
+      "preferred_skills": ["Networking"],
+      "compensation": "10 LPA",
+      "raw_eligibility_text": null
+    }
+  },
+  {
+    "id": "d12",
+    "source": "job_description",
+    "raw_text": "Full Stack Developer - Meadowlane Health\n\nBuilding tools for clinics. Need someone comfortable across the stack: Node.js and Express on the backend, React on the frontend, MongoDB for storage. Healthcare domain experience is a bonus but not required. We're a Series A startup so things move fast — comfort with ambiguity matters more than your college GPA, though we do ask for a minimum 6.5 CGPA as a baseline filter. CTC: 12 LPA. Rolling deadline, first-come-first-served, drive closes 2026-10-25.",
+    "expected": {
+      "company_name": "Meadowlane Health",
+      "role": "Full Stack Developer",
+      "deadline": "2026-10-25",
+      "min_cgpa": 6.5,
+      "allowed_branches": null,
+      "required_skills": ["Node.js", "Express", "React", "MongoDB"],
+      "preferred_skills": ["Healthcare domain experience"],
+      "compensation": "12 LPA",
+      "raw_eligibility_text": "We're a Series A startup so things move fast — comfort with ambiguity matters more than your college GPA."
+    }
+  },
+  {
+    "id": "d13",
+    "source": "email",
+    "raw_text": "Placement Notice: Fairwind Games - Gameplay Programmer\n\nCompany: Fairwind Games. Role: Gameplay Programmer. Branches open: CSE, IT. CGPA: 7.2 minimum. Required: C++, Unity or Unreal Engine. Preferred: multiplayer networking experience. CTC not disclosed. Apply by 2026-10-18.",
+    "expected": {
+      "company_name": "Fairwind Games",
+      "role": "Gameplay Programmer",
+      "deadline": "2026-10-18",
+      "min_cgpa": 7.2,
+      "allowed_branches": ["CSE", "IT"],
+      "required_skills": ["C++", "Unity", "Unreal Engine"],
+      "preferred_skills": ["multiplayer networking"],
+      "compensation": null,
+      "raw_eligibility_text": null
+    }
+  },
+  {
+    "id": "d14",
+    "source": "job_description",
+    "raw_text": "Security Analyst - Ashgrove Defense\n\nWe want candidates who genuinely think like attackers. Familiarity with OWASP Top 10, basic scripting (Python or Bash), and network fundamentals expected. A security certification (even a free one like TryHackMe badges) will strengthen your application, but we mostly evaluate through a CTF-style take-home challenge, not your transcript. All engineering branches welcome. 11 LPA. Apply before 2026-11-20.",
+    "expected": {
+      "company_name": "Ashgrove Defense",
+      "role": "Security Analyst",
+      "deadline": "2026-11-20",
+      "min_cgpa": null,
+      "allowed_branches": null,
+      "required_skills": ["OWASP Top 10", "Python", "Bash", "network fundamentals"],
+      "preferred_skills": ["security certification"],
+      "compensation": "11 LPA",
+      "raw_eligibility_text": "We mostly evaluate through a CTF-style take-home challenge, not your transcript."
+    }
+  },
+  {
+    "id": "d15",
+    "source": "email",
+    "raw_text": "Fwd: Hiring - Palmgrove Consulting (Business Analyst)\n\nPalmgrove Consulting is hiring Business Analysts. Open to all branches, CGPA >= 6.0. Skills: Excel, SQL, PowerPoint. Communication skills are heavily weighted in the interview. CTC: 9 LPA. Deadline: 2026-10-08.",
+    "expected": {
+      "company_name": "Palmgrove Consulting",
+      "role": "Business Analyst",
+      "deadline": "2026-10-08",
+      "min_cgpa": 6.0,
+      "allowed_branches": null,
+      "required_skills": ["Excel", "SQL", "PowerPoint"],
+      "preferred_skills": [],
+      "compensation": "9 LPA",
+      "raw_eligibility_text": "Communication skills are heavily weighted in the interview."
+    }
+  },
+  {
+    "id": "d16",
+    "source": "job_description",
+    "raw_text": "Site Reliability Engineer - Granite Peak Infra\n\nStrong Linux internals knowledge required. You should be able to read kernel logs without flinching. Go or Rust for tooling. Kubernetes at scale experience preferred, not required for junior candidates. We don't filter by CGPA at all — take-home + system design interview only. CSE/IT/ECE. Compensation 20 LPA. Deadline 2026-12-15.",
+    "expected": {
+      "company_name": "Granite Peak Infra",
+      "role": "Site Reliability Engineer",
+      "deadline": "2026-12-15",
+      "min_cgpa": null,
+      "allowed_branches": ["CSE", "IT", "ECE"],
+      "required_skills": ["Linux", "Go", "Rust"],
+      "preferred_skills": ["Kubernetes"],
+      "compensation": "20 LPA",
+      "raw_eligibility_text": "We don't filter by CGPA at all — take-home + system design interview only."
+    }
+  },
+  {
+    "id": "d17",
+    "source": "email",
+    "raw_text": "Placement Cell Notice - Hollowbrook Bank (Graduate Trainee, Tech)\n\nHollowbrook Bank Graduate Trainee Program, Technology track. Eligible branches: CSE, IT, ECE, EEE. Minimum CGPA 7.0, no active backlogs. Core requirement: Java and SQL. Package: 13.5 LPA fixed. Apply by 2026-10-22.",
+    "expected": {
+      "company_name": "Hollowbrook Bank",
+      "role": "Graduate Trainee, Tech",
+      "deadline": "2026-10-22",
+      "min_cgpa": 7.0,
+      "allowed_branches": ["CSE", "IT", "ECE", "EEE"],
+      "required_skills": ["Java", "SQL"],
+      "preferred_skills": [],
+      "compensation": "13.5 LPA fixed",
+      "raw_eligibility_text": "No active backlogs."
+    }
+  },
+  {
+    "id": "d18",
+    "source": "job_description",
+    "raw_text": "Junior Data Engineer - Thistlewood Analytics\n\nWork on pipelines that move a lot of data around. Required: Python, SQL, Apache Spark. Airflow experience preferred. We look at GitHub activity more than academic record, so if your CGPA isn't stellar but your projects are solid, still apply — branch and CGPA are not filters here. 10.5 LPA. Deadline: end of October 2026.",
+    "expected": {
+      "company_name": "Thistlewood Analytics",
+      "role": "Junior Data Engineer",
+      "deadline": "2026-10-31",
+      "min_cgpa": null,
+      "allowed_branches": null,
+      "required_skills": ["Python", "SQL", "Apache Spark"],
+      "preferred_skills": ["Airflow"],
+      "compensation": "10.5 LPA",
+      "raw_eligibility_text": "We look at GitHub activity more than academic record, so if your CGPA isn't stellar but your projects are solid, still apply — branch and CGPA are not filters here."
+    }
+  }
+]

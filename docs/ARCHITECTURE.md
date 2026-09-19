@@ -175,7 +175,7 @@ second person keeping a different gate moving in parallel anymore.
 | 6 | LangGraph full workflow (+ Planner), GitHub/Calendar MCP | Done — see §15 |
 | 7 | *(merged into Gate 4/6 — MCP integrations are no longer a separate late gate)* | N/A |
 | 8 | Frontend dashboard | Done — see §16 |
-| 9 | Testing + evaluation | Next |
+| 9 | Testing + evaluation | Done — see §17 |
 | 10 | Cloud deployment | Pending |
 | 11 | Security + observability | Pending |
 | 12 | Final demonstration | Pending |
@@ -773,3 +773,53 @@ stayed clean throughout.
 - **No dashboard route tests for the frontend itself** (component/unit tests) — only the
   backend routes it calls are tested; the frontend's correctness was verified manually
   in-browser this gate, not via an automated frontend test suite.
+
+## 17. Gate 9 — What Was Actually Built
+
+Scope: close the two Gate 8 deferrals above (frontend has no test suite; no automated
+check of AI-quality claims beyond manual smoke tests) plus `docs/EVALUATION.md`'s
+long-standing, never-built benchmark requirement.
+
+**Backend:** coverage was already solid (88 tests, 95%) going in — added
+`tests/test_deps.py`/`tests/test_security.py` for the untested auth-failure branches
+(`get_current_user` with a malformed-subject or deleted-user token; `decode_access_token`
+with a garbage/expired token), not a wholesale rewrite. 93 tests passing.
+
+**Frontend:** added Vitest + React Testing Library (per Next.js's own bundled guide —
+checked because this repo's `frontend/AGENTS.md` warns Next 16 differs from training
+data), `frontend/vitest.config.mts`, `npm test`. 43 tests across `lib/api.ts`,
+`lib/auth-context.tsx`, the presentational components, and the login/register pages
+(mocking `lib/api`/`lib/auth-context`/`next/navigation`, not a real backend). Found and
+worked around one real markup gap while writing these: `components/ui.tsx`'s `Field`
+renders a `<label>` with no `htmlFor`/`id`, so it's not associated with its input for
+`getByLabelText` (or for screen readers) — tests query by `input[type=...]` instead;
+the accessibility gap itself wasn't fixed, out of this gate's scope. Still no E2E
+(Playwright/Cypress) — this gate closed the "no frontend tests at all" gap with unit/
+component coverage, not the E2E item Gate 8 also deferred.
+
+**Evaluation harness (`backend/eval/`) — the real gap, per `docs/EVALUATION.md`'s
+own long-overdue requirement:** built a hand-labeled benchmark (52 items:
+18 Discovery extraction cases, 16 Eligibility cases, 18 labeled skills across 2 resumes)
+and a harness (`eval/run_eval.py`) that calls the **real** agents — real Gemini LLM,
+real Gemini embeddings, confirmed this environment (unlike the original dev sandbox
+`app/agents/llm_client.py`'s docstring describes) can reach
+`generativelanguage.googleapis.com`. Full results in `docs/EVALUATION.md`'s updated
+table and `backend/eval/report.md`. Two real findings came out of actually running it,
+not just building it:
+1. `app/agents/skill_gap.py`'s `MATCH_THRESHOLD` (flagged in that file's own Gate 6
+   comment as an unvalidated single-resume guess) was confirmed wrong in the direction
+   predicted — raised 0.34 → 0.38 on real sweep evidence, which raised this benchmark's
+   3-way classification accuracy from 7/18 to 12/18. Not a full fix: matched- and
+   weak-labeled distances genuinely interleave across resume domains in this data, which
+   is a structural limit of a single global threshold, not something more tuning on n=2
+   resumes will solve.
+2. The Eligibility Agent's qualitative-LLM path is not fully reproducible run-to-run —
+   `gemini-3.6-flash` silently ignores the `temperature=0` this project sets
+   (`app/agents/llm_client.py`), confirmed by the same two inputs producing different
+   decisions across two runs. Not fixed this gate; flagged for Gate 11.
+
+**Not yet done / explicitly deferred:** E2E browser tests (Playwright/Cypress) of the
+critical path; the human-eval "Recommendations" row in `docs/EVALUATION.md` (the harness
+emits a sample review sheet in `eval/report.md` for manual scoring, not filled in yet);
+the `Field` component's missing label association; recalibrating `WEAK_THRESHOLD` (needs
+a bigger benchmark than n=2 resumes to do with any confidence).

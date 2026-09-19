@@ -1,0 +1,34 @@
+{
+  "resumes": [
+    {
+      "id": "r1_backend",
+      "text": "Priya Sharma - Software Engineer\n\nExperience:\nBackend Engineer at Meridian Systems (2023-2026)\n- Built and maintained REST APIs using Python and FastAPI, serving 2M+ requests/day\n- Designed PostgreSQL schemas and optimized slow queries, cutting p95 latency by 40%\n- Deployed services to AWS (ECS, RDS, S3) with Terraform-managed infrastructure\n- Wrote integration tests with pytest and set up CI/CD pipelines in GitHub Actions\n\nBackend Intern at Fernwood Data (2022)\n- Contributed to a Django-based internal tool for data ingestion\n- Wrote SQL queries against a PostgreSQL data warehouse\n\nProjects:\n- Personal blog engine built with Flask and SQLite\n- Small machine learning side project using scikit-learn to classify support tickets\n\nSkills: Python, FastAPI, Django, Flask, PostgreSQL, AWS, Docker, Git, pytest, SQL\n\nNo experience with Kubernetes, Rust, or Swift — these are on my list to learn next.",
+      "skills": [
+        {"skill": "Python", "label": "matched", "note": "Central to every role described, with concrete usage context."},
+        {"skill": "FastAPI", "label": "matched", "note": "Named with concrete usage (REST APIs, request volume)."},
+        {"skill": "PostgreSQL", "label": "matched", "note": "Named with concrete usage (schema design, query optimization) in two roles."},
+        {"skill": "AWS", "label": "matched", "note": "Named with concrete services (ECS, RDS, S3)."},
+        {"skill": "Docker", "label": "weak", "note": "Only appears in the trailing skills list, no narrative usage."},
+        {"skill": "Machine Learning", "label": "weak", "note": "Only a small side project, not professional experience."},
+        {"skill": "Kubernetes", "label": "missing", "note": "Explicitly disclaimed: 'No experience with Kubernetes'."},
+        {"skill": "Rust", "label": "missing", "note": "Explicitly disclaimed: 'No experience with ... Rust'."},
+        {"skill": "Swift", "label": "missing", "note": "Explicitly disclaimed: 'No experience with ... Swift'."}
+      ]
+    },
+    {
+      "id": "r2_frontend",
+      "text": "Jordan Lee - Frontend Engineer\n\nExperience:\nFrontend Engineer at Willowmere Retail (2023-2026)\n- Built customer-facing features in React and TypeScript for a high-traffic e-commerce site\n- Migrated legacy jQuery pages to a modern React + Redux architecture\n- Worked closely with designers to implement responsive layouts using Tailwind CSS\n- Used Node.js and Express for a small internal BFF (backend-for-frontend) service\n\nFrontend Intern at Clearwater Media (2022)\n- Assisted with GraphQL query integration in an existing Apollo Client setup\n- Fixed cross-browser CSS bugs and improved Lighthouse accessibility scores\n\nProjects:\n- A personal portfolio site built with Next.js and deployed on Vercel\n- A Chrome extension written in vanilla JavaScript\n\nSkills: JavaScript, TypeScript, React, Redux, Next.js, Node.js, Tailwind CSS, GraphQL\n\nI have no background in machine learning or data science — that's not an area I've worked in.",
+      "skills": [
+        {"skill": "React", "label": "matched", "note": "Named with concrete usage across two roles."},
+        {"skill": "TypeScript", "label": "matched", "note": "Named with concrete usage (customer-facing features)."},
+        {"skill": "Node.js", "label": "matched", "note": "Named with concrete usage (BFF service with Express)."},
+        {"skill": "Tailwind CSS", "label": "matched", "note": "Named with concrete usage (responsive layouts)."},
+        {"skill": "GraphQL", "label": "weak", "note": "Only a brief, junior-level mention ('assisted with')."},
+        {"skill": "Next.js", "label": "weak", "note": "Only appears in a side project, not professional experience."},
+        {"skill": "Machine Learning", "label": "missing", "note": "Explicitly disclaimed: 'no background in machine learning'."},
+        {"skill": "Python", "label": "missing", "note": "Never mentioned anywhere in the resume."},
+        {"skill": "Kubernetes", "label": "missing", "note": "Never mentioned anywhere in the resume."}
+      ]
+    }
+  ]
+}

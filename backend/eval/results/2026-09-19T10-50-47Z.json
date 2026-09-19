@@ -1,0 +1,859 @@
+{
+  "timestamp": "2026-09-19T10-50-47Z",
+  "discovery": {
+    "n_items": 18,
+    "n_succeeded": 18,
+    "n_errors": 0,
+    "errors": [],
+    "singular_field_accuracy": {
+      "company_name": 1.0,
+      "role": 1.0,
+      "compensation": 1.0,
+      "min_cgpa": 1.0,
+      "deadline": 1.0
+    },
+    "raw_eligibility_text_presence_accuracy": 0.889,
+    "list_field_prf": {
+      "required_skills": {
+        "precision": 0.911,
+        "recall": 0.962,
+        "f1": 0.936
+      },
+      "preferred_skills": {
+        "precision": 0.75,
+        "recall": 0.833,
+        "f1": 0.789
+      },
+      "allowed_branches": {
+        "precision": 0.893,
+        "recall": 1.0,
+        "f1": 0.943
+      }
+    },
+    "p95_latency_ms": 1876.5,
+    "per_item": [
+      {
+        "id": "d01",
+        "latency_ms": 1678.070124995429,
+        "output": {
+          "company_name": "Innotech Systems",
+          "role": "SDE-1",
+          "deadline": "2026-10-12T00:00:00Z",
+          "min_cgpa": 7.5,
+          "allowed_branches": [
+            "CSE",
+            "IT"
+          ],
+          "required_skills": [
+            "Java",
+            "Spring Boot",
+            "SQL"
+          ],
+          "preferred_skills": [
+            "Docker",
+            "Kubernetes"
+          ],
+          "compensation": "14 LPA",
+          "raw_eligibility_text": null
+        }
+      },
+      {
+        "id": "d02",
+        "latency_ms": 1430.121750017861,
+        "output": {
+          "company_name": "Quanta Labs",
+          "role": "Backend Engineer",
+          "deadline": "2026-11-30T23:59:59Z",
+          "min_cgpa": null,
+          "allowed_branches": null,
+          "required_skills": [
+            "Python",
+            "FastAPI",
+            "PostgreSQL"
+          ],
+          "preferred_skills": [
+            "AWS"
+          ],
+          "compensation": "competitive",
+          "raw_eligibility_text": "We value strong problem-solving skills and a willingness to learn over specific years of experience, so we don't have a strict CGPA cutoff."
+        }
+      },
+      {
+        "id": "d03",
+        "latency_ms": 1581.7825839912985,
+        "output": {
+          "company_name": "Vertex Analytics",
+          "role": "Data Analyst Intern",
+          "deadline": "2026-09-20T00:00:00Z",
+          "min_cgpa": 6.5,
+          "allowed_branches": [
+            "CSE",
+            "IT",
+            "ECE"
+          ],
+          "required_skills": [
+            "SQL",
+            "Excel",
+            "Python"
+          ],
+          "preferred_skills": [
+            "Power BI",
+            "Tableau"
+          ],
+          "compensation": "25,000/month",
+          "raw_eligibility_text": null
+        }
+      },
+      {
+        "id": "d04",
+        "latency_ms": 1408.4431669907644,
+        "output": {
+          "company_name": "Bramble Co.",
+          "role": "Frontend Developer",
+          "deadline": null,
+          "min_cgpa": null,
+          "allowed_branches": [
+            "all branches"
+          ],
+          "required_skills": [
+            "React",
+            "TypeScript"
+          ],
+          "preferred_skills": [
+            "CSS",
+            "Tailwind"
+          ],
+          "compensation": null,
+          "raw_eligibility_text": "good eye for UI detail, we'll look at your portfolio, we hire based on a take-home project"
+        }
+      },
+      {
+        "id": "d05",
+        "latency_ms": 1576.3102500059176,
+        "output": {
+          "company_name": "Castlewood Financial",
+          "role": "Associate Software Engineer",
+          "deadline": "2026-10-05T00:00:00Z",
+          "min_cgpa": 8.0,
+          "allowed_branches": [
+            "CSE",
+            "ECE",
+            "EEE"
+          ],
+          "required_skills": [
+            "C++",
+            "Data Structures",
+            "Algorithms",
+            "Operating Systems"
+          ],
+          "preferred_skills": [],
+          "compensation": "18 LPA base + performance bonus",
+          "raw_eligibility_text": "No backlogs allowed at the time of application."
+        }
+      },
+      {
+        "id": "d06",
+        "latency_ms": 1470.8597080025356,
+        "output": {
+          "company_name": "Solara AI",
+          "role": "Machine Learning Intern",
+          "deadline": null,
+          "min_cgpa": null,
+          "allowed_branches": null,
+          "required_skills": [
+            "Python",
+            "PyTorch"
+          ],
+          "preferred_skills": [
+            "NLP"
+          ],
+          "compensation": "Unpaid",
+          "raw_eligibility_text": "You should genuinely enjoy reading papers and reimplementing ideas \u2014 that curiosity matters more to us than your GPA."
+        }
+      },
+      {
+        "id": "d07",
+        "latency_ms": 1521.57370801433,
+        "output": {
+          "company_name": "Redgate Systems",
+          "role": "DevOps Engineer",
+          "deadline": "2026-12-01T00:00:00Z",
+          "min_cgpa": 7.0,
+          "allowed_branches": [
+            "All branches"
+          ],
+          "required_skills": [
+            "Linux",
+            "Docker",
+            "Kubernetes",
+            "CI/CD",
+            "Jenkins",
+            "GitHub Actions"
+          ],
+          "preferred_skills": [
+            "AWS",
+            "GCP"
+          ],
+          "compensation": "16 LPA",
+          "raw_eligibility_text": null
+        }
+      },
+      {
+        "id": "d08",
+        "latency_ms": 1451.998000004096,
+        "output": {
+          "company_name": "Northwind Retail",
+          "role": "QA Automation Engineer",
+          "deadline": "2027-01-15T00:00:00Z",
+          "min_cgpa": 6.0,
+          "allowed_branches": [
+            "CSE",
+            "IT",
+            "Mechanical"
+          ],
+          "required_skills": [
+            "Selenium",
+            "Python"
+          ],
+          "preferred_skills": [
+            "pytest"
+          ],
+          "compensation": "8 LPA",
+          "raw_eligibility_text": "Mechanical (if you can code)"
+        }
+      },
+      {
+        "id": "d09",
+        "latency_ms": 1450.376958004199,
+        "output": {
+          "company_name": "Bluepeak Robotics",
+          "role": "Embedded Systems",
+          "deadline": "2026-11-05T00:00:00Z",
+          "min_cgpa": null,
+          "allowed_branches": [
+            "ECE",
+            "EEE"
+          ],
+          "required_skills": [
+            "C",
+            "Embedded C",
+            "ARM microcontrollers"
+          ],
+          "preferred_skills": [
+            "RTOS"
+          ],
+          "compensation": null,
+          "raw_eligibility_text": "strong fundamentals in C and microcontrollers"
+        }
+      },
+      {
+        "id": "d10",
+        "latency_ms": 1441.672542016022,
+        "output": {
+          "company_name": "Orchard Studio",
+          "role": "Product Design Intern",
+          "deadline": "2026-10-30T00:00:00Z",
+          "min_cgpa": null,
+          "allowed_branches": null,
+          "required_skills": [
+            "Figma",
+            "UI design"
+          ],
+          "preferred_skills": [
+            "taste",
+            "iteration speed"
+          ],
+          "compensation": "15k/month",
+          "raw_eligibility_text": "literally anyone can apply, including non-CS branches"
+        }
+      },
+      {
+        "id": "d11",
+        "latency_ms": 2320.7302919763606,
+        "output": {
+          "company_name": "Sterling Cloud",
+          "role": "Cloud Support Engineer",
+          "deadline": "2026-09-19T00:00:00Z",
+          "min_cgpa": 6.5,
+          "allowed_branches": [
+            "CSE",
+            "IT",
+            "ECE"
+          ],
+          "required_skills": [
+            "Linux basics",
+            "AWS",
+            "Azure",
+            "GCP"
+          ],
+          "preferred_skills": [
+            "Networking fundamentals"
+          ],
+          "compensation": "10 LPA",
+          "raw_eligibility_text": "CGPA 6.5+, CSE/IT/ECE. Must know Linux basics and at least one of AWS/Azure/GCP. Networking fundamentals preferred."
+        }
+      },
+      {
+        "id": "d12",
+        "latency_ms": 1495.076125022024,
+        "output": {
+          "company_name": "Meadowlane Health",
+          "role": "Full Stack Developer",
+          "deadline": "2026-10-25T00:00:00Z",
+          "min_cgpa": 6.5,
+          "allowed_branches": null,
+          "required_skills": [
+            "Node.js",
+            "Express",
+            "React",
+            "MongoDB"
+          ],
+          "preferred_skills": [
+            "Healthcare domain experience"
+          ],
+          "compensation": "12 LPA",
+          "raw_eligibility_text": "comfort with ambiguity matters more than your college GPA"
+        }
+      },
+      {
+        "id": "d13",
+        "latency_ms": 1734.3428329913877,
+        "output": {
+          "company_name": "Fairwind Games",
+          "role": "Gameplay Programmer",
+          "deadline": "2026-10-18T00:00:00Z",
+          "min_cgpa": 7.2,
+          "allowed_branches": [
+            "CSE",
+            "IT"
+          ],
+          "required_skills": [
+            "C++",
+            "Unity",
+            "Unreal Engine"
+          ],
+          "preferred_skills": [
+            "multiplayer networking experience"
+          ],
+          "compensation": null,
+          "raw_eligibility_text": null
+        }
+      },
+      {
+        "id": "d14",
+        "latency_ms": 1434.0766250097658,
+        "output": {
+          "company_name": "Ashgrove Defense",
+          "role": "Security Analyst",
+          "deadline": "2026-11-20T00:00:00Z",
+          "min_cgpa": null,
+          "allowed_branches": [
+            "all engineering branches"
+          ],
+          "required_skills": [
+            "OWASP Top 10",
+            "Python",
+            "Bash",
+            "network fundamentals"
+          ],
+          "preferred_skills": [
+            "security certification"
+          ],
+          "compensation": "11 LPA",
+          "raw_eligibility_text": "candidates who genuinely think like attackers"
+        }
+      },
+      {
+        "id": "d15",
+        "latency_ms": 1841.0908750083763,
+        "output": {
+          "company_name": "Palmgrove Consulting",
+          "role": "Business Analyst",
+          "deadline": "2026-10-08T00:00:00Z",
+          "min_cgpa": 6.0,
+          "allowed_branches": null,
+          "required_skills": [
+            "Excel",
+            "SQL",
+            "PowerPoint"
+          ],
+          "preferred_skills": [],
+          "compensation": "9 LPA",
+          "raw_eligibility_text": "Communication skills are heavily weighted in the interview."
+        }
+      },
+      {
+        "id": "d16",
+        "latency_ms": 1601.281832990935,
+        "output": {
+          "company_name": "Granite Peak Infra",
+          "role": "Site Reliability Engineer",
+          "deadline": "2026-12-15T00:00:00Z",
+          "min_cgpa": null,
+          "allowed_branches": [
+            "CSE",
+            "IT",
+            "ECE"
+          ],
+          "required_skills": [
+            "Linux internals",
+            "Go",
+            "Rust"
+          ],
+          "preferred_skills": [
+            "Kubernetes at scale"
+          ],
+          "compensation": "20 LPA",
+          "raw_eligibility_text": "Strong Linux internals knowledge required. You should be able to read kernel logs without flinching. We don't filter by CGPA at all \u2014 take-home + system design interview only."
+        }
+      },
+      {
+        "id": "d17",
+        "latency_ms": 1876.491666014772,
+        "output": {
+          "company_name": "Hollowbrook Bank",
+          "role": "Graduate Trainee, Tech",
+          "deadline": "2026-10-22T00:00:00Z",
+          "min_cgpa": 7.0,
+          "allowed_branches": [
+            "CSE",
+            "IT",
+            "ECE",
+            "EEE"
+          ],
+          "required_skills": [
+            "Java",
+            "SQL"
+          ],
+          "preferred_skills": [],
+          "compensation": "13.5 LPA fixed",
+          "raw_eligibility_text": "no active backlogs"
+        }
+      },
+      {
+        "id": "d18",
+        "latency_ms": 1505.709500022931,
+        "output": {
+          "company_name": "Thistlewood Analytics",
+          "role": "Junior Data Engineer",
+          "deadline": "2026-10-31T23:59:59Z",
+          "min_cgpa": null,
+          "allowed_branches": null,
+          "required_skills": [
+            "Python",
+            "SQL",
+            "Apache Spark"
+          ],
+          "preferred_skills": [
+            "Airflow"
+          ],
+          "compensation": "10.5 LPA",
+          "raw_eligibility_text": "We look at GitHub activity more than academic record, so if your CGPA isn't stellar but your projects are solid, still apply \u2014 branch and CGPA are not filters here."
+        }
+      }
+    ]
+  },
+  "eligibility": {
+    "n_items": 16,
+    "n_succeeded": 16,
+    "n_errors": 0,
+    "errors": [],
+    "accuracy": 0.875,
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0,
+    "confusion_matrix": {
+      "eligible": {
+        "eligible": 3,
+        "partially_eligible": 0,
+        "not_eligible": 0,
+        "uncertain": 2
+      },
+      "partially_eligible": {
+        "eligible": 0,
+        "partially_eligible": 0,
+        "not_eligible": 0,
+        "uncertain": 0
+      },
+      "not_eligible": {
+        "eligible": 0,
+        "partially_eligible": 0,
+        "not_eligible": 3,
+        "uncertain": 0
+      },
+      "uncertain": {
+        "eligible": 0,
+        "partially_eligible": 0,
+        "not_eligible": 0,
+        "uncertain": 8
+      }
+    },
+    "method_mismatches": [],
+    "p95_latency_ms": 14560.8,
+    "per_item": [
+      {
+        "id": "e01",
+        "expected": "not_eligible",
+        "predicted": "not_eligible",
+        "method": "deterministic",
+        "reason": "A hard eligibility criterion (CGPA or branch) was not met."
+      },
+      {
+        "id": "e02",
+        "expected": "not_eligible",
+        "predicted": "not_eligible",
+        "method": "deterministic",
+        "reason": "A hard eligibility criterion (CGPA or branch) was not met."
+      },
+      {
+        "id": "e03",
+        "expected": "uncertain",
+        "predicted": "uncertain",
+        "method": "deterministic",
+        "reason": "Cannot determine eligibility: required profile fields are missing."
+      },
+      {
+        "id": "e04",
+        "expected": "uncertain",
+        "predicted": "uncertain",
+        "method": "deterministic",
+        "reason": "Cannot determine eligibility: required profile fields are missing."
+      },
+      {
+        "id": "e05",
+        "expected": "uncertain",
+        "predicted": "uncertain",
+        "method": "deterministic",
+        "reason": "Cannot determine eligibility: required profile fields are missing."
+      },
+      {
+        "id": "e06",
+        "expected": "eligible",
+        "predicted": "eligible",
+        "method": "deterministic",
+        "reason": "All deterministic eligibility criteria were met; no qualitative criteria to interpret."
+      },
+      {
+        "id": "e07",
+        "expected": "uncertain",
+        "predicted": "uncertain",
+        "method": "llm",
+        "reason": "The student meets the structured academic requirements, but the qualitative statement requires strong problem-solving skills and a willingness to learn, which are not detailed in the provided profile facts."
+      },
+      {
+        "id": "e08",
+        "expected": "uncertain",
+        "predicted": "uncertain",
+        "method": "llm",
+        "reason": "The posting evaluates candidates primarily on GitHub activity and personal projects. The student's profile only specifies CGPA and branch, missing any details regarding GitHub activity or personal projects."
+      },
+      {
+        "id": "e09",
+        "expected": "uncertain",
+        "predicted": "uncertain",
+        "method": "llm",
+        "reason": "The qualitative requirement specifies that no active backlogs are allowed at the time of application, but the student's profile does not provide information regarding active backlogs."
+      },
+      {
+        "id": "e10",
+        "expected": "eligible",
+        "predicted": "uncertain",
+        "method": "llm",
+        "reason": "The qualitative requirement mentions that communication skills are heavily weighted in the interview, but the student profile does not provide any information or assessment regarding their communication skills."
+      },
+      {
+        "id": "e11",
+        "expected": "eligible",
+        "predicted": "uncertain",
+        "method": "llm",
+        "reason": "The job posting explicitly values 'taste and iteration speed' over academic transcripts. While the student meets the branch requirement (CSE), the profile provides no projects, portfolio, or work samples to demonstrate taste or iteration speed."
+      },
+      {
+        "id": "e12",
+        "expected": "not_eligible",
+        "predicted": "not_eligible",
+        "method": "deterministic",
+        "reason": "A hard eligibility criterion (CGPA or branch) was not met."
+      },
+      {
+        "id": "e13",
+        "expected": "eligible",
+        "predicted": "eligible",
+        "method": "deterministic",
+        "reason": "All deterministic eligibility criteria were met; no qualitative criteria to interpret."
+      },
+      {
+        "id": "e14",
+        "expected": "uncertain",
+        "predicted": "uncertain",
+        "method": "deterministic",
+        "reason": "Cannot determine eligibility: required profile fields are missing."
+      },
+      {
+        "id": "e15",
+        "expected": "eligible",
+        "predicted": "eligible",
+        "method": "llm",
+        "reason": "The student belongs to the ECE branch, which is explicitly listed as one of the allowed branches (CSE, IT, or ECE) in the qualitative eligibility statement."
+      },
+      {
+        "id": "e16",
+        "expected": "uncertain",
+        "predicted": "uncertain",
+        "method": "llm",
+        "reason": "The job posting requires candidates to hold a valid AWS Solutions Architect certification. The provided student profile does not contain information regarding certifications."
+      }
+    ]
+  },
+  "skill_gap": {
+    "n_labeled_skills": 18,
+    "n_errors": 0,
+    "errors": [],
+    "accuracy_at_current_thresholds": 0.389,
+    "current_match_threshold": 0.34,
+    "current_weak_threshold": 0.42,
+    "threshold_sweep": [
+      {
+        "threshold": 0.2,
+        "precision": 1.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      {
+        "threshold": 0.22,
+        "precision": 1.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      {
+        "threshold": 0.24,
+        "precision": 1.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      {
+        "threshold": 0.26,
+        "precision": 1.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      {
+        "threshold": 0.28,
+        "precision": 1.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "precision": 1.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      {
+        "threshold": 0.32,
+        "precision": 1.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      {
+        "threshold": 0.34,
+        "precision": 1.0,
+        "recall": 0.25,
+        "f1": 0.4
+      },
+      {
+        "threshold": 0.36,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.857
+      },
+      {
+        "threshold": 0.38,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      {
+        "threshold": 0.4,
+        "precision": 0.923,
+        "recall": 1.0,
+        "f1": 0.96
+      },
+      {
+        "threshold": 0.42,
+        "precision": 0.857,
+        "recall": 1.0,
+        "f1": 0.923
+      },
+      {
+        "threshold": 0.44,
+        "precision": 0.857,
+        "recall": 1.0,
+        "f1": 0.923
+      },
+      {
+        "threshold": 0.46,
+        "precision": 0.857,
+        "recall": 1.0,
+        "f1": 0.923
+      },
+      {
+        "threshold": 0.48,
+        "precision": 0.857,
+        "recall": 1.0,
+        "f1": 0.923
+      },
+      {
+        "threshold": 0.5,
+        "precision": 0.857,
+        "recall": 1.0,
+        "f1": 0.923
+      }
+    ],
+    "best_single_threshold_by_f1": {
+      "threshold": 0.38,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "per_skill": [
+      {
+        "skill": "Python",
+        "expected_label": "matched",
+        "distance": 0.34085577726364136,
+        "negated": false,
+        "predicted_label": "weak"
+      },
+      {
+        "skill": "FastAPI",
+        "expected_label": "matched",
+        "distance": 0.32508742809295654,
+        "negated": false,
+        "predicted_label": "matched"
+      },
+      {
+        "skill": "PostgreSQL",
+        "expected_label": "matched",
+        "distance": 0.3526495099067688,
+        "negated": false,
+        "predicted_label": "weak"
+      },
+      {
+        "skill": "AWS",
+        "expected_label": "matched",
+        "distance": 0.345691978931427,
+        "negated": false,
+        "predicted_label": "weak"
+      },
+      {
+        "skill": "Docker",
+        "expected_label": "weak",
+        "distance": 0.3725132942199707,
+        "negated": false,
+        "predicted_label": "weak"
+      },
+      {
+        "skill": "Machine Learning",
+        "expected_label": "weak",
+        "distance": 0.3706511855125427,
+        "negated": false,
+        "predicted_label": "weak"
+      },
+      {
+        "skill": "Kubernetes",
+        "expected_label": "missing",
+        "distance": 0.3751661777496338,
+        "negated": true,
+        "predicted_label": "missing"
+      },
+      {
+        "skill": "Rust",
+        "expected_label": "missing",
+        "distance": 0.36454397439956665,
+        "negated": true,
+        "predicted_label": "missing"
+      },
+      {
+        "skill": "Swift",
+        "expected_label": "missing",
+        "distance": 0.3491957187652588,
+        "negated": true,
+        "predicted_label": "missing"
+      },
+      {
+        "skill": "React",
+        "expected_label": "matched",
+        "distance": 0.35728585720062256,
+        "negated": false,
+        "predicted_label": "weak"
+      },
+      {
+        "skill": "TypeScript",
+        "expected_label": "matched",
+        "distance": 0.35610848665237427,
+        "negated": false,
+        "predicted_label": "weak"
+      },
+      {
+        "skill": "Node.js",
+        "expected_label": "matched",
+        "distance": 0.3679457902908325,
+        "negated": false,
+        "predicted_label": "weak"
+      },
+      {
+        "skill": "Tailwind CSS",
+        "expected_label": "matched",
+        "distance": 0.3572503924369812,
+        "negated": false,
+        "predicted_label": "weak"
+      },
+      {
+        "skill": "GraphQL",
+        "expected_label": "weak",
+        "distance": 0.33366644382476807,
+        "negated": false,
+        "predicted_label": "matched"
+      },
+      {
+        "skill": "Next.js",
+        "expected_label": "weak",
+        "distance": 0.33254629373550415,
+        "negated": false,
+        "predicted_label": "matched"
+      },
+      {
+        "skill": "Machine Learning",
+        "expected_label": "missing",
+        "distance": 0.3651389479637146,
+        "negated": true,
+        "predicted_label": "missing"
+      },
+      {
+        "skill": "Python",
+        "expected_label": "missing",
+        "distance": 0.3857896327972412,
+        "negated": false,
+        "predicted_label": "weak"
+      },
+      {
+        "skill": "Kubernetes",
+        "expected_label": "missing",
+        "distance": 0.40459269285202026,
+        "negated": false,
+        "predicted_label": "weak"
+      }
+    ]
+  },
+  "agent_workflow": {
+    "discovery": {
+      "n_runs": 18,
+      "success_rate": 1.0,
+      "p95_latency_ms": 1876.5
+    },
+    "eligibility": {
+      "n_runs": 16,
+      "success_rate": 1.0,
+      "p95_latency_ms": 14560.8
+    }
+  }
+}

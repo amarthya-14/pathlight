@@ -34,16 +34,31 @@ from app.retrieval.vector_store import query_resume_chunks, user_has_indexed_res
 # Two real findings, not one:
 #   1. Genuine matches and genuine non-matches for a topically-similar (backend
 #      engineering) resume overlap almost completely in the 0.32-0.39 band — a single
-#      global threshold cannot cleanly separate them. Thresholds below are a rough
-#      recalibration using this one real example as a directional signal, NOT a
-#      validated fit — that requires the labeled benchmark set docs/EVALUATION.md
-#      already calls for (Gate 9), not more manual tweaking against one resume.
+#      global threshold cannot cleanly separate them. Thresholds below were a rough
+#      recalibration using that one real example as a directional signal, NOT a
+#      validated fit — explicitly flagged as needing the labeled benchmark set
+#      docs/EVALUATION.md called for (Gate 9), not more manual tweaking against one resume.
 #   2. Embedding distance alone can't tell "no experience with Kubernetes" apart from
 #      "experienced with Kubernetes" — both chunks contain the word "Kubernetes" and
 #      score similarly close. This is a structural gap, not a threshold problem, so it's
 #      fixed separately below with a deterministic negation check on the actual matched
 #      chunk text (see _skill_explicitly_negated), not by moving the numbers around.
-MATCH_THRESHOLD = 0.34
+#
+# Gate 9 evaluation harness (backend/eval/, see docs/EVALUATION.md): ran the above
+# real-API smoke test's directional signal through an actual hand-labeled benchmark for
+# the first time — 2 resumes (backend-focused and frontend-focused domains), 18 labeled
+# skills. Result confirmed finding #1 above is real, not a one-resume fluke: 7 of 8
+# genuinely-matched skills fell below the old MATCH_THRESHOLD=0.34 into "weak"
+# (distances 0.325-0.368), while two genuinely "weak" skills (GraphQL 0.334, Next.js
+# 0.333) scored BELOW several genuine matches — matched/weak distance ranges truly
+# interleave across resume domains, so no single threshold can perfectly separate them.
+# The matched-vs-not-matched split is much cleaner: a sweep over the same 18 labeled
+# skills found MATCH_THRESHOLD=0.38 as the single best split (raises 3-way classification
+# accuracy on this benchmark from 7/18 to 12/18 — see eval/report.md). Moved
+# MATCH_THRESHOLD to 0.38 on that evidence. WEAK_THRESHOLD is left at 0.42: nothing in
+# this run's sweep contradicts it, and n=2 resumes is still too small to recalibrate it
+# with any confidence — grow the benchmark before touching it again.
+MATCH_THRESHOLD = 0.38
 WEAK_THRESHOLD = 0.42
 
 _NEGATION_CUES = r"(?:no|not|without|never|none|lacks?|lacking)"

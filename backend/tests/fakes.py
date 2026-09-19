@@ -39,9 +39,12 @@ class FakeEmbedder:
     This sandbox cannot reach Google's embedding API — see app/retrieval/embeddings.py.
 
     Vectors are chosen so, against Chroma's cosine distance:
-    - "python" vs "python" -> distance 0.0 -> MATCHED (<= MATCH_THRESHOLD 0.25)
-    - "python" vs "django" -> distance ~0.35 -> WEAK (> 0.25, <= WEAK_THRESHOLD 0.45)
-    - "python" vs "aws" -> distance 1.0 (orthogonal) -> MISSING (> 0.45)
+    - "python" vs "python" -> distance 0.0 -> MATCHED (well under MATCH_THRESHOLD)
+    - "python" vs "django" -> distance 0.40 -> WEAK (between MATCH_THRESHOLD and
+      WEAK_THRESHOLD — see the current values in app/agents/skill_gap.py, not repeated
+      here as literals so this comment can't silently go stale the way the thresholds
+      themselves once did, see that module's Gate 6/Gate 9 comments)
+    - "python" vs "aws" -> distance 1.0 (orthogonal) -> MISSING (well over WEAK_THRESHOLD)
     - anything unrecognized -> the default vector, also orthogonal to every bucket -> MISSING
     These exact distance values are asserted directly in tests/test_vector_store.py so a
     change to this fake (or to Chroma's distance formula) is caught, not silently assumed.
@@ -49,7 +52,7 @@ class FakeEmbedder:
 
     _BUCKETS = {
         "python": [1.0, 0.0, 0.0, 0.0],
-        "django": [0.65, 0.76, 0.0, 0.0],
+        "django": [0.6, 0.8, 0.0, 0.0],
         "aws": [0.0, 0.0, 1.0, 0.0],
     }
     _DEFAULT = [0.0, 0.0, 0.0, 1.0]
