@@ -36,6 +36,10 @@ class OpportunityRequirements(BaseModel):
     preferred_skills: list[str] = Field(default_factory=list)
     compensation: str | None = None
     raw_eligibility_text: str | None = None  # qualitative text the LLM may need to interpret
+    # Gate 10: where to apply, if the posting says. apply_email enables email-first
+    # auto-apply (after human review); application_url is shown for manual applying.
+    apply_email: str | None = None
+    application_url: str | None = None
 
 
 class Opportunity(Document):

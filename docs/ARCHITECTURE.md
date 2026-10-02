@@ -176,9 +176,10 @@ second person keeping a different gate moving in parallel anymore.
 | 7 | *(merged into Gate 4/6 — MCP integrations are no longer a separate late gate)* | N/A |
 | 8 | Frontend dashboard | Done — see §16 |
 | 9 | Testing + evaluation | Done — see §17 |
-| 10 | Cloud deployment | Pending |
-| 11 | Security + observability | Pending |
-| 12 | Final demonstration | Pending |
+| 10 | Autonomous Application Pipeline — Part 1, off-campus (Gmail-sourced discovery, resume tailoring, human-reviewed email apply) | ✅ Implemented (email-apply phase) — see `docs/AUTONOMOUS_APPLICATIONS.md` §12; real-Gmail smoke test still pending |
+| 11 | Cloud deployment | Pending |
+| 12 | Security + observability | Pending |
+| 13 | Final demonstration | Pending |
 
 ## 9. Full Reference
 

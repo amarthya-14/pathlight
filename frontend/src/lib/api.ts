@@ -2,10 +2,14 @@ import type {
   ApplicationOut,
   DashboardHomeOut,
   DocumentOut,
+  GmailSyncOut,
   IngestResponse,
+  IntegrationOut,
   PreparationPlanOut,
   ProfileOut,
   ProfileUpsert,
+  ReviewResponse,
+  TailoredResumeOut,
   UserOut,
 } from "./types";
 import { ApiError } from "./types";
@@ -104,6 +108,16 @@ export const api = {
     }),
 
   getDashboardHome: () => request<DashboardHomeOut>("/api/dashboard/home"),
+
+  getTailoredResume: (applicationId: string) =>
+    request<TailoredResumeOut>(`/api/applications/${applicationId}/tailored-resume`),
+  reviewApplication: (applicationId: string, approve: boolean) =>
+    request<ReviewResponse>(`/api/applications/${applicationId}/review`, { method: "POST", body: { approve } }),
+
+  listIntegrations: () => request<IntegrationOut[]>("/api/integrations"),
+  gmailConnectUrl: () => request<{ auth_url: string }>("/api/integrations/gmail/connect"),
+  disconnectGmail: () => request<void>("/api/integrations/gmail", { method: "DELETE" }),
+  syncGmail: () => request<GmailSyncOut>("/api/integrations/gmail/sync", { method: "POST" }),
 };
 
 export { ApiError };

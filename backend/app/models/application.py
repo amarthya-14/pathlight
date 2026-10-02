@@ -28,6 +28,9 @@ class ApplicationStage(str, Enum):
     INTERVIEW = "INTERVIEW"
     OFFER = "OFFER"
     REJECTED = "REJECTED"
+    # Gate 10 (docs/AUTONOMOUS_APPLICATIONS.md §4): outcomes of the human review gate.
+    MANUAL_APPLY_REQUIRED = "MANUAL_APPLY_REQUIRED"  # approved, but no apply_email to send to
+    SKIPPED_BY_USER = "SKIPPED_BY_USER"  # reviewed the tailored resume, chose not to apply
 
 
 class ApplicationStatusEvent(BaseModel):
@@ -36,12 +39,25 @@ class ApplicationStatusEvent(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+# Stages after which the user has already decided — the pipeline never re-tailors or
+# re-opens review for these, so re-ingesting a posting can't trigger a second send.
+REVIEW_DECIDED_STAGES = {
+    ApplicationStage.APPLIED,
+    ApplicationStage.MANUAL_APPLY_REQUIRED,
+    ApplicationStage.SKIPPED_BY_USER,
+}
+
+
 class Application(Document):
     user_id: Indexed(PydanticObjectId)
     opportunity_id: PydanticObjectId
     eligibility: EligibilityResult | None = None  # most recent result — history is in status_history
     skill_gap: SkillGapResult | None = None  # most recent result (Gate 5)
     status_history: list[ApplicationStatusEvent] = Field(default_factory=list)
+    # Gate 10: set atomically by POST /api/applications/{id}/review the moment a review
+    # decision is claimed (see app/api/routes/applications.py::_claim_review) — this is
+    # what makes a double-clicked Approve send exactly one email, not two.
+    reviewed_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

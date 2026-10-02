@@ -89,7 +89,11 @@ anywhere, since there's no `Notification` model to log it to (still "Planned" in
 accepted.
 
 **Gmail MCP:** still planned — the Discovery Agent currently takes text directly or via
-an uploaded Document, not a live inbox poll.
+an uploaded Document, not a live inbox poll. Full design for the real Gmail MCP (OAuth,
+read scope for sourcing, send scope for auto-apply) is in `docs/AUTONOMOUS_APPLICATIONS.md`
+§5 (Gate 10) — implemented: `app/mcp/gmail_server.py`, plus the Resume Tailor Agent
+(`app/agents/resume_tailor.py`, strong LLM, with a deterministic fabrication guard around
+it — the LLM's output is rejected in code if it claims a skill the base resume lacks).
 
 ## Non-negotiable rule
 Every agent decision returns a structured, schema-validated result — never a bare

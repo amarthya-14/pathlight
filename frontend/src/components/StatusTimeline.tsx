@@ -11,6 +11,8 @@ const STAGE_LABELS: Record<string, string> = {
   INTERVIEW: "Interview",
   OFFER: "Offer",
   REJECTED: "Rejected",
+  MANUAL_APPLY_REQUIRED: "Apply Manually",
+  SKIPPED_BY_USER: "Skipped",
 };
 
 export function StatusTimeline({ history }: { history: ApplicationStatusEvent[] }) {

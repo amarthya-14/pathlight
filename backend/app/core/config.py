@@ -61,6 +61,30 @@ class Settings(BaseSettings):
     # NEXT_PUBLIC_API_URL's counterpart on the frontend side (.env.example).
     CORS_ORIGINS: str = "http://localhost:3000"
 
+    # Gate 10 — Gmail MCP (real per-user Google OAuth2) + autonomous applications. See
+    # docs/AUTONOMOUS_APPLICATIONS.md. GMAIL_MCP_CLIENT_ID/SECRET have been stubbed in
+    # .env.example since Gate 0; this is the first gate that actually reads them.
+    GMAIL_MCP_CLIENT_ID: str = ""
+    GMAIL_MCP_CLIENT_SECRET: str = ""
+    # Must exactly match an "Authorized redirect URI" on the Google Cloud OAuth client.
+    GMAIL_OAUTH_REDIRECT_URI: str = "http://localhost:8000/api/integrations/gmail/callback"
+    # Where the OAuth callback sends the browser back to once it's done.
+    FRONTEND_URL: str = "http://localhost:3000"
+    # Fernet key for OAuth tokens at rest (app/core/crypto.py). Generate once with
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # and never commit it. Empty = Gmail integration disabled (connect returns 503), never
+    # a silent fallback to plaintext storage.
+    TOKEN_ENCRYPTION_KEY: str = ""
+    GMAIL_POLL_ENABLED: bool = True
+    GMAIL_POLL_INTERVAL_SECONDS: int = 900
+    # Inspection-based starting allowlist, NOT a validated list (see
+    # docs/AUTONOMOUS_APPLICATIONS.md §10) — comma-separated sender addresses whose mail
+    # is treated as a job alert. Anything else in the inbox is never read by the poller.
+    GMAIL_ALERT_SENDERS: str = (
+        "jobalerts-noreply@linkedin.com,jobs-noreply@linkedin.com,"
+        "noreply@naukri.com,info@naukri.com,naukrialerts@naukri.com"
+    )
+
     model_config = SettingsConfigDict(env_file="../.env", env_file_encoding="utf-8", extra="ignore")
 
 

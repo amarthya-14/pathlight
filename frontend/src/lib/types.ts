@@ -50,7 +50,9 @@ export type ApplicationStage =
   | "OA"
   | "INTERVIEW"
   | "OFFER"
-  | "REJECTED";
+  | "REJECTED"
+  | "MANUAL_APPLY_REQUIRED"
+  | "SKIPPED_BY_USER";
 
 export type ApplicationStatusEvent = {
   stage: ApplicationStage;
@@ -64,6 +66,9 @@ export type ApplicationOut = {
   company_name: string;
   role: string;
   deadline: string | null;
+  source: string | null;
+  apply_email: string | null;
+  application_url: string | null;
   eligibility: EligibilityResult | null;
   skill_gap: SkillGapResult | null;
   skill_gap_note: string | null;
@@ -126,6 +131,48 @@ export type IngestResponse = {
   skill_gap_note: string | null;
   needs_human_review: boolean;
   error: string | null;
+};
+
+// Gate 10 — autonomous applications (backend/app/schemas/application.py, integration.py)
+
+export type TailoredResumeOut = {
+  application_id: string;
+  base_document_id: string;
+  base_resume_text: string | null;
+  tailored_text: string;
+  cover_note: string;
+  changes_summary: string[];
+  skills_emphasized: string[];
+  confidence: number;
+  warnings: string[];
+  generated_at: string;
+};
+
+export type ReviewOutcome = "applied" | "manual_apply_required" | "skipped";
+
+export type ReviewResponse = {
+  outcome: ReviewOutcome;
+  detail: string;
+  sent_to: string | null;
+  application_url: string | null;
+  application: ApplicationOut;
+};
+
+export type IntegrationOut = {
+  provider: string;
+  status: "connected" | "error";
+  scopes: string[];
+  account_email: string | null;
+  connected_at: string;
+  last_polled_at: string | null;
+  last_error: string | null;
+};
+
+export type GmailSyncOut = {
+  messages_seen: number;
+  opportunities_ingested: number;
+  skipped_already_processed: number;
+  failures: string[];
 };
 
 export class ApiError extends Error {

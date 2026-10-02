@@ -1,6 +1,6 @@
 # Database Design
 
-**Status:** Through Gate 6 implemented and tested (MongoDB, switched from the originally
+**Status:** Through Gate 10 implemented and tested (MongoDB, switched from the originally
 planned PostgreSQL — see `ARCHITECTURE.md` §11 for the honest reasoning and trade-offs).
 
 ORM: **Beanie** (async ODM on Motor + Pydantic). Collections/indexes are created/ensured
@@ -18,8 +18,8 @@ versioned upgrades later.
 | Opportunity | ✅ Implemented | **compound unique index** on `(company_id, role_hash)` — verified to reject duplicate inserts at the DB level, not just via application check |
 | Skill / ProfileSkill | Not built — superseded | See note below |
 | ResumeVersion | Planned (Gate 3) | needed for document ingestion |
-| OpportunityRequirement | ✅ Implemented — **as an embedded sub-document**, not a separate collection (see ARCHITECTURE.md §13) | `Opportunity.requirements` |
-| Application | ✅ Implemented | one per `(user_id, opportunity_id)`, compound unique index |
+| OpportunityRequirement | ✅ Implemented — **as an embedded sub-document**, not a separate collection (see ARCHITECTURE.md §13) | `Opportunity.requirements`; Gate 10 adds `apply_email` / `application_url` (extracted only if literally present in the posting) |
+| Application | ✅ Implemented | one per `(user_id, opportunity_id)`, compound unique index. Gate 10: `reviewed_at`, claimed atomically by the review route (`find_one_and_update` conditioned on it being unset) so one approval sends exactly one email; new stages `MANUAL_APPLY_REQUIRED` / `SKIPPED_BY_USER` |
 | ApplicationStatus | ✅ Implemented — embedded array (`Application.status_history`), append-only via `$push` | plan from §11 held up in practice |
 | Deadline | Planned | likely folds into `Opportunity.deadline` rather than a separate document |
 | PreparationPlan / PreparationTask | ✅ Implemented (Gate 6) | `app/models/preparation.py` — dependency graph via self-referencing IDs (`PreparationTask.depends_on: list[PydanticObjectId]`), not a self-join; `PreparationTask` is an embedded `BaseModel`, not its own Document (no independent query pattern) |
@@ -27,7 +27,8 @@ versioned upgrades later.
 | Notification | Planned | still nothing writes to this — e.g. a failed Calendar MCP reminder in the pipeline currently has no in-app fallback to create here |
 | AgentExecution | ✅ Implemented | logs every Discovery/Eligibility run, success or failure |
 | Document | ✅ Implemented | uploaded resumes/JDs/emails; `storage_filename` is what the Filesystem MCP tool uses to locate the file, not a raw path |
-| Integration | Planned (Gate 4+) | tracks MCP tool connection state per user |
+| Integration | ✅ Implemented (Gate 10) | `app/models/integration.py` — compound unique index on `(user_id, provider)`; OAuth tokens stored **only** as Fernet ciphertext (`app/core/crypto.py`), never returned by any API; `processed_message_ids` (capped at 500) dedupes Gmail polling |
+| TailoredResume | ✅ Implemented (Gate 10) | `app/models/tailored_resume.py` — one per application (unique index), regenerated in place; no stored diff (frontend diffs against the base `Document.extracted_text`) |
 
 ## Key decisions
 - Dedupe (`Opportunity`) and the 1:1 `User`↔`Profile` relationship are both enforced by

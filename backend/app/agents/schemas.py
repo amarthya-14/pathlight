@@ -27,6 +27,9 @@ class ExtractedOpportunity(BaseModel):
     preferred_skills: list[str] = Field(default_factory=list)
     compensation: str | None = None
     raw_eligibility_text: str | None = None
+    # Gate 10 — only if literally present in the text, never guessed from the company name.
+    apply_email: str | None = None
+    application_url: str | None = None
 
 
 class EligibilityDecision(str, Enum):
@@ -62,3 +65,16 @@ class SkillGapResult(BaseModel):
     missing: list[str] = Field(default_factory=list)
     github_evidence: dict[str, list[str]] = Field(default_factory=dict)
     github_unavailable: bool = False
+
+
+class TailoredResumeResult(BaseModel):
+    """Resume Tailor Agent output (Gate 10). The agent may reword, reorder and
+    re-emphasize the user's existing resume only — a required skill the resume genuinely
+    lacks goes in `warnings`, never into `tailored_text`. That rule is enforced in code,
+    not just in the prompt: see app/agents/resume_tailor.py::find_fabricated_skills."""
+    tailored_text: str
+    cover_note: str
+    changes_summary: list[str] = Field(default_factory=list)
+    skills_emphasized: list[str] = Field(default_factory=list)
+    confidence: float
+    warnings: list[str] = Field(default_factory=list)

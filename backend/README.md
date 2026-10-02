@@ -1,7 +1,8 @@
 # Pathlight Backend (FastAPI + LangGraph + MCP)
 
-**Status:** Gate 6 done — Discovery, Eligibility, Skill Gap, and Planner agents are all
-implemented and tested, wired into a complete 4-node LangGraph pipeline, backed by a
+**Status:** Gate 10 done (email-apply phase) — Gmail-sourced discovery, resume tailoring,
+and human-reviewed email applying, on top of Gate 6's Discovery, Eligibility, Skill Gap,
+and Planner agents, wired into a 5-agent LangGraph pipeline, backed by a
 Chroma vector store for semantic skill matching and GitHub/Calendar MCP tools. LLM +
 embedding provider: Gemini — and, new at Gate 6, actually verified against the real
 Gemini API (see the section below; this used to be an open limitation).
@@ -27,8 +28,15 @@ Gemini API (see the section below; this used to be an open limitation).
 - **Calendar MCP** (writes to an internal CalendarEvent collection standing in for a real
   external calendar until OAuth exists — Gate 6) — ✅ implemented
 - **RAG pipeline**: resume chunking → embedding → Chroma storage, at upload time — ✅ implemented
-- **LangGraph pipeline** (Discovery → persist → Eligibility → Skill Gap → Planner, retry + needs_human_review fallback) — ✅ implemented
-- Gmail MCP, private-repo GitHub access, real external Calendar — still planned, see `docs/ARCHITECTURE.md` §15
+- **LangGraph pipeline** (Discovery → persist → Eligibility → Skill Gap → Planner → Resume Tailor, retry + needs_human_review fallback) — ✅ implemented
+- **Gmail MCP** (real per-user Google OAuth2, Fernet-encrypted tokens, read for sourcing /
+  send for applying — Gate 10) — ✅ implemented
+- **Resume Tailor Agent** (strong LLM + deterministic fabrication guard, Gate 10) — ✅ implemented
+- **Gmail job-alert poller** (in-process background task → existing pipeline, Gate 10) — ✅ implemented
+- **Human review gate** (`POST /api/applications/{id}/review`, the only path that can send
+  email; exactly-once via an atomic claim — Gate 10) — ✅ implemented
+- Private-repo GitHub access, real external Calendar, browser form-fill auto-apply — still
+  planned, see `docs/ARCHITECTURE.md` §15 and `docs/AUTONOMOUS_APPLICATIONS.md` §10/§12
 
 ## ✅ Gemini calls verified against the real API (Gate 6)
 
@@ -107,6 +115,9 @@ for the manual smoke test above, not for `pytest`.)
 | `google.api_core.exceptions.NotFound: model not found` | Gemini model name in `.env` is stale/retired | Check https://ai.google.dev/gemini-api/docs/models — and see `docs/ARCHITECTURE.md` §15: `gemini-3.1-pro` specifically doesn't exist and its preview replacement needs a billing-enabled account |
 | Skill Gap results look wrong (obvious matches showing as missing) | `MATCH_THRESHOLD`/`WEAK_THRESHOLD` in `app/agents/skill_gap.py` are only a directional recalibration (Gate 6), not a full benchmark-validated fit | Run the manual smoke test above and adjust the thresholds based on real observed distances |
 | `OperationFailure: db already exists with different case` | MongoDB db names collide case-insensitively even though stored case-sensitively — you likely have an existing db with different casing on the same `mongod` | Point `MONGO_DB_NAME` at a distinctly-named database, or drop the conflicting one if it's not needed |
+| `503` from `/api/integrations/gmail/connect` | `GMAIL_MCP_CLIENT_ID`/`SECRET` or `TOKEN_ENCRYPTION_KEY` unset in `.env` | Set all three (see `.env.example`) and restart — the poller also only starts once OAuth is configured |
+| Gmail consent screen says `redirect_uri_mismatch` | `GMAIL_OAUTH_REDIRECT_URI` isn't registered on the Google OAuth client | Add it verbatim under "Authorized redirect URIs" in Google Cloud Console |
+| Gmail shows "Needs reconnecting" | Token refresh failed (consent revoked, or OAuth app in Testing mode — refresh tokens expire after 7 days there) | Reconnect from the Integrations page |
 | `pymongo.errors.ServerSelectionTimeoutError` when running the app | MongoDB isn't running / wrong `MONGO_URI` | Start MongoDB or check `.env` |
 
 ## Structure

@@ -24,7 +24,11 @@ leave a field null or empty if it is not mentioned. In particular:
 - Do not invent compensation figures.
 - If eligibility is described in qualitative, non-numeric terms (e.g. "strong problem \
 solving skills preferred"), put that text verbatim in raw_eligibility_text rather than \
-trying to force it into a structured field it doesn't fit."""
+trying to force it into a structured field it doesn't fit.
+- apply_email / application_url: set ONLY if the text literally contains an email \
+address or URL for submitting applications. Never construct one from the company name \
+(e.g. do not invent careers@company.com). Job-alert digests usually contain a link to the \
+posting — that goes in application_url, not apply_email."""
 
 
 async def run_discovery(raw_text: str, source: str, user_id: str) -> tuple[ExtractedOpportunity, AgentExecution]:

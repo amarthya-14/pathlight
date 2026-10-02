@@ -28,7 +28,7 @@ from app.main import app
 import app.mcp.sandbox as sandbox_module
 import app.retrieval.vector_store as vector_store_module
 from app.core.config import settings as app_settings
-from tests.fakes import FakeEmbedder
+from tests.fakes import FakeEmbedder, FakeLLM
 
 
 @pytest_asyncio.fixture
@@ -56,6 +56,15 @@ async def client(tmp_path, monkeypatch):
     fake_embedder = FakeEmbedder()
     monkeypatch.setattr("app.retrieval.vector_store.get_document_embedder", lambda: fake_embedder)
     monkeypatch.setattr("app.retrieval.vector_store.get_query_embedder", lambda: fake_embedder)
+
+    # Gate 10: every pipeline run with a resume on file now reaches the Resume Tailor
+    # node, which calls the strong LLM. Without this default, every pre-Gate-10 pipeline
+    # test that uploads a resume would try the real Gemini API (slow network timeouts,
+    # then a degraded node). Tests that exercise tailoring override this with a FakeLLM.
+    monkeypatch.setattr(
+        "app.agents.resume_tailor.get_strong_llm",
+        lambda: FakeLLM(raise_exc=RuntimeError("LLM not faked for resume_tailor in this test")),
+    )
 
     @asynccontextmanager
     async def noop_lifespan(app):

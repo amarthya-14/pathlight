@@ -17,6 +17,8 @@ from app.models.application import Application
 from app.models.agent_execution import AgentExecution
 from app.models.preparation import PreparationPlan
 from app.models.calendar_event import CalendarEvent
+from app.models.integration import Integration
+from app.models.tailored_resume import TailoredResume
 
 
 async def init_db(client=None) -> None:
@@ -32,6 +34,6 @@ async def init_db(client=None) -> None:
         database=mongo_client[settings.MONGO_DB_NAME],
         document_models=[
             User, Profile, Company, Opportunity, Document, Application, AgentExecution,
-            PreparationPlan, CalendarEvent,
+            PreparationPlan, CalendarEvent, Integration, TailoredResume,
         ],
     )

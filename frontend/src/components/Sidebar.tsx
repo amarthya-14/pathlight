@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Briefcase, ClipboardList, Compass, LogOut, UserRound } from "lucide-react";
+import { Briefcase, ClipboardList, Compass, LogOut, Mail, UserRound } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const LINKS = [
   { href: "/", label: "Home", icon: Compass },
   { href: "/opportunities", label: "Opportunities", icon: Briefcase },
   { href: "/applications", label: "Applications", icon: ClipboardList },
+  { href: "/integrations", label: "Integrations", icon: Mail },
   { href: "/profile", label: "Profile", icon: UserRound },
 ];
 

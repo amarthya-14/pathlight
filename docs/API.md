@@ -22,6 +22,13 @@ GET    /api/applications/{id}/preparation-plan   200 -> PreparationPlanOut | 404
 GET    /api/applications                          200 -> [ApplicationOut] (auth required) — Gate 8
 GET    /api/applications/{id}                      200 -> ApplicationOut | 404 not found/owned (auth required) — Gate 8
 GET    /api/dashboard/home                          200 -> DashboardHomeOut (auth required) — Gate 8, server-composed aggregation
+GET    /api/applications/{id}/tailored-resume       200 -> TailoredResumeOut (incl. base_resume_text for diffing) | 404 none yet / not owned (auth required) — Gate 10
+POST   /api/applications/{id}/review                200 -> ReviewResponse | 404 not owned | 409 not READY_TO_APPLY / already reviewed / Gmail not connected | 502 Gmail send failed (auth required) — Gate 10
+GET    /api/integrations                            200 -> [IntegrationOut] — status/scopes/account only, never tokens (auth required) — Gate 10
+GET    /api/integrations/gmail/connect              200 -> {"auth_url"} | 503 OAuth or TOKEN_ENCRYPTION_KEY not configured (auth required) — Gate 10
+GET    /api/integrations/gmail/callback             302 -> {FRONTEND_URL}/integrations?gmail=connected|error&reason=… (Google redirects here; user identified by signed `state`) — Gate 10
+DELETE /api/integrations/gmail                      204 revoked + deleted | 404 not connected (auth required) — Gate 10
+POST   /api/integrations/gmail/sync                 200 -> GmailSyncOut (runs the job-alert poll now) | 409 not connected (auth required) — Gate 10
 GET    /health                                  200 -> {"status": "ok"}
 ```
 
@@ -49,9 +56,19 @@ information (no deadline) to judge feasibility — don't render that as "not fea
 Note: all IDs in responses are MongoDB ObjectId strings (24 hex characters), not UUIDs —
 this changed when the database switched from PostgreSQL to MongoDB (`ARCHITECTURE.md` §11).
 
+`POST /api/applications/{id}/review` (Gate 10) is the human approval gate and the only
+code path that can send email on the user's behalf. Body `{"approve": bool}`:
+- `false` → `SKIPPED_BY_USER`, `outcome: "skipped"`; Gmail is never called.
+- `true` + the posting had an `apply_email` → sends the tailored resume (plain-text
+  attachment) + cover note from the user's Gmail → `APPLIED`, `outcome: "applied"`.
+- `true` + no `apply_email` → `MANUAL_APPLY_REQUIRED`, `outcome: "manual_apply_required"`,
+  with `application_url` if one was extracted.
+Only one review per application ever succeeds (atomic claim on `Application.reviewed_at`);
+a failed send releases the claim so the user can retry. `ApplicationOut` gained `source`,
+`apply_email` and `application_url` so the review screen can show where an approval goes.
+
 ## Planned (later gates)
 ```
 GET    /api/opportunities/{id}          # Gate 5+
 PATCH  /api/applications/{id}/status    # Gate 5+ (manual stage updates beyond DISCOVERED/ELIGIBILITY_CHECKED)
-POST   /api/mcp/gmail/connect           # Gate 6+, OAuth handoff for Gmail MCP
 ```

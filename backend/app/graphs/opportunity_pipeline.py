@@ -1,6 +1,12 @@
 """
 Opportunity ingestion pipeline (LangGraph) — Discovery -> persist -> Eligibility ->
-Skill Gap -> Planner.
+Skill Gap -> Planner -> Resume Tailor.
+
+Resume Tailor (Gate 10) is the last node and the only one that moves an Application to
+READY_TO_APPLY. Applying itself is deliberately NOT a node: sending an application is
+irreversible, so it only ever happens from the human review route
+(POST /api/applications/{id}/review), never from inside this graph — see
+docs/AUTONOMOUS_APPLICATIONS.md §1/§3.
 
 Skill Gap was deliberately deferred out of Gate 4 (see docs/ARCHITECTURE.md §13) until
 its actual dependency — Chroma + embeddings — existed, rather than shipping a
@@ -17,7 +23,7 @@ loop: neither is a structured-output LLM call prone to schema-validation failure
 Gap is a distance-threshold classification, Planner is pure deterministic computation),
 so a single attempt is treated as reliable enough for this MVP.
 """
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Optional, TypedDict
 
 from beanie import PydanticObjectId
@@ -27,13 +33,16 @@ from pymongo.errors import DuplicateKeyError
 from app.agents.discovery import run_discovery
 from app.agents.eligibility import run_eligibility
 from app.agents.planner import DEFAULT_HOURS_PER_DAY, compute_available_hours, run_planner
-from app.agents.schemas import EligibilityResult, ExtractedOpportunity, SkillGapResult
+from app.agents.resume_tailor import run_resume_tailor
+from app.agents.schemas import EligibilityDecision, EligibilityResult, ExtractedOpportunity, SkillGapResult
 from app.agents.skill_gap import run_skill_gap
 from app.core.dedupe import role_hash as compute_role_hash
 from app.mcp.calendar_client import mcp_create_reminder
-from app.models.application import Application, ApplicationStage, ApplicationStatusEvent
+from app.models.application import REVIEW_DECIDED_STAGES, Application, ApplicationStage, ApplicationStatusEvent
+from app.models.document import Document, DocumentType
 from app.models.opportunity import Company, Opportunity, OpportunityRequirements
 from app.models.preparation import PreparationPlan
+from app.models.tailored_resume import TailoredResume
 from app.models.user import Profile
 from app.retrieval.vector_store import user_has_indexed_resume
 
@@ -51,6 +60,8 @@ class PipelineState(TypedDict, total=False):
     skill_gap: Optional[SkillGapResult]
     skill_gap_note: Optional[str]
     preparation_plan: Optional[PreparationPlan]
+    tailored_resume: Optional[TailoredResume]
+    resume_tailor_note: Optional[str]
     error: Optional[str]
     needs_human_review: bool
 
@@ -85,6 +96,8 @@ async def _persist_opportunity_node(state: PipelineState) -> PipelineState:
         preferred_skills=extraction.preferred_skills,
         compensation=extraction.compensation,
         raw_eligibility_text=extraction.raw_eligibility_text,
+        apply_email=extraction.apply_email,
+        application_url=extraction.application_url,
     )
 
     existing = await Opportunity.find_one(
@@ -281,6 +294,83 @@ async def _planner_node(state: PipelineState) -> PipelineState:
     return state
 
 
+async def _latest_resume(user_id: str) -> Document | None:
+    return await Document.find(
+        Document.owner_id == PydanticObjectId(user_id),
+        Document.doc_type == DocumentType.RESUME,
+        Document.extracted_text != None,  # noqa: E711 — Beanie query expression, not a Python comparison
+    ).sort(-Document.created_at).first_or_none()
+
+
+async def _resume_tailor_node(state: PipelineState) -> PipelineState:
+    eligibility = state.get("eligibility")
+    if eligibility is None or eligibility.decision == EligibilityDecision.NOT_ELIGIBLE:
+        # No point tailoring a resume for something the user can't apply to — and if
+        # eligibility itself failed, there's no basis to say they can.
+        return state
+
+    application = await Application.get(PydanticObjectId(state["application_id"]))
+    if any(e.stage in REVIEW_DECIDED_STAGES for e in application.status_history):
+        # The user already decided on this posting (applied/skipped). Re-ingesting the
+        # same posting (e.g. it reappears in tomorrow's alert digest) must never reopen
+        # review — that's how a second application email would get sent.
+        return state
+
+    resume = await _latest_resume(state["user_id"])
+    if resume is None or not resume.extracted_text.strip():
+        state["resume_tailor_note"] = (
+            "No resume on file — a tailored resume could not be generated. "
+            "Upload a resume to enable reviewing and applying."
+        )
+        return state
+
+    opportunity = await Opportunity.get(PydanticObjectId(state["opportunity_id"]))
+    company = await Company.get(opportunity.company_id)
+    requirements = opportunity.requirements or OpportunityRequirements()
+
+    try:
+        result, _execution = await run_resume_tailor(
+            state["user_id"],
+            state["opportunity_id"],
+            resume.extracted_text,
+            opportunity.role,
+            company.name if company else "the company",
+            requirements,
+            state.get("skill_gap"),
+        )
+    except Exception as e:
+        # Degrades this step only — the eligibility/skill-gap/plan results above are
+        # still valid and already saved. Already logged via AgentExecution.
+        state["resume_tailor_note"] = f"Tailored resume could not be generated: {e}"
+        return state
+
+    tailored = await TailoredResume.find_one(TailoredResume.application_id == application.id)
+    if tailored is None:
+        tailored = TailoredResume(
+            application_id=application.id,
+            user_id=PydanticObjectId(state["user_id"]),
+            base_document_id=resume.id,
+            **result.model_dump(),
+        )
+        await tailored.insert()
+    else:
+        for field, value in result.model_dump().items():
+            setattr(tailored, field, value)
+        tailored.base_document_id = resume.id
+        tailored.generated_at = datetime.now(timezone.utc)
+        await tailored.save()
+    state["tailored_resume"] = tailored
+
+    application.status_history.append(
+        ApplicationStatusEvent(
+            stage=ApplicationStage.READY_TO_APPLY,
+            note="Tailored resume ready — review it before anything is sent.",
+        )
+    )
+    await application.save()
+    return state
+
+
 async def _needs_human_review_node(state: PipelineState) -> PipelineState:
     # Terminal node: the pipeline gave up after retries. Every attempt was already
     # logged via AgentExecution — this just ends the graph cleanly instead of raising,
@@ -299,6 +389,7 @@ def build_pipeline():
     graph.add_node("eligibility", _eligibility_node)
     graph.add_node("skill_gap", _skill_gap_node)
     graph.add_node("planner", _planner_node)
+    graph.add_node("resume_tailor", _resume_tailor_node)
     graph.add_node("needs_human_review", _needs_human_review_node)
 
     graph.set_entry_point("discovery")
@@ -310,7 +401,8 @@ def build_pipeline():
     graph.add_edge("persist_opportunity", "eligibility")
     graph.add_edge("eligibility", "skill_gap")
     graph.add_edge("skill_gap", "planner")
-    graph.add_edge("planner", END)
+    graph.add_edge("planner", "resume_tailor")
+    graph.add_edge("resume_tailor", END)
     graph.add_edge("needs_human_review", END)
 
     return graph.compile()
