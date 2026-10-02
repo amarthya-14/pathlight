@@ -2,37 +2,65 @@
 
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { Sidebar } from "./Sidebar";
+import { AuroraBackground } from "./AuroraBackground";
+import { BrandMark } from "./Brand";
+import { MobileNav, Sidebar } from "./Sidebar";
 
-const AUTH_ROUTES = new Set(["/login", "/register"]);
+// Public pages render full-bleed with their own layout. Note "/" (the landing page)
+// stays public even when signed in — it shows "Open dashboard" instead of sign-up CTAs.
+const PUBLIC_ROUTES = new Set(["/", "/login", "/register"]);
 
-/** Applies the sidebar + padded dashboard shell only once a user is signed in AND the
- * current route isn't login/register — otherwise a still-valid session (localStorage
- * token) would render the dashboard sidebar behind the login form if someone manually
- * navigated to /login while already signed in. Auth pages always render full-bleed. */
+/** Applies the sidebar + padded app shell only once a user is signed in AND the route
+ * isn't public — otherwise a still-valid session would render the dashboard chrome
+ * behind the login form. */
 export function Shell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const pathname = usePathname();
 
-  if (AUTH_ROUTES.has(pathname)) return <>{children}</>;
+  if (PUBLIC_ROUTES.has(pathname)) {
+    return (
+      <>
+        <AuroraBackground />
+        <div className="relative z-10">{children}</div>
+      </>
+    );
+  }
 
   // Avoids a sidebar-then-no-sidebar layout flash while the initial /me check resolves.
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-500" />
-      </div>
+      <>
+        <AuroraBackground />
+        <div className="relative z-10 flex min-h-screen items-center justify-center">
+          <div className="animate-pulse-ring rounded-[10px]">
+            <BrandMark size={44} />
+          </div>
+        </div>
+      </>
     );
   }
 
-  if (!user) return <>{children}</>;
+  if (!user) {
+    return (
+      <>
+        <AuroraBackground />
+        <div className="relative z-10">{children}</div>
+      </>
+    );
+  }
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <main className="min-w-0 flex-1 px-6 py-8 sm:px-10 lg:px-12">
-        <div className="mx-auto max-w-5xl">{children}</div>
-      </main>
-    </div>
+    <>
+      <AuroraBackground />
+      <div className="relative z-10 flex min-h-screen">
+        <Sidebar />
+        <div className="min-w-0 flex-1">
+          <MobileNav />
+          <main className="px-4 pb-28 pt-6 sm:px-8 lg:px-12 lg:pb-16 lg:pt-10">
+            <div className="mx-auto max-w-6xl">{children}</div>
+          </main>
+        </div>
+      </div>
+    </>
   );
 }

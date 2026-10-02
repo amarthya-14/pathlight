@@ -6,7 +6,8 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { Button, Field, TextInput } from "@/components/ui";
+import { AuthLayout, PasswordInput } from "@/components/AuthLayout";
+import { Alert, Button, Field, TextInput } from "@/components/ui";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -17,7 +18,7 @@ export default function LoginPage() {
   const { user, refresh } = useAuth();
 
   useEffect(() => {
-    if (user) router.replace("/");
+    if (user) router.replace("/dashboard");
   }, [user, router]);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -27,7 +28,7 @@ export default function LoginPage() {
     try {
       await api.login(email, password);
       await refresh();
-      router.push("/");
+      router.push("/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Login failed");
     } finally {
@@ -36,36 +37,44 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-slate-50 to-white px-4">
-      <div className="w-full max-w-sm animate-fade-in">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-lg font-bold text-white shadow-lg shadow-indigo-500/25">
-            P
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Welcome back</h1>
-          <p className="mt-1 text-sm text-slate-500">Log in to your Pathlight dashboard</p>
-        </div>
-
-        <form onSubmit={onSubmit} className="card-shadow space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
-          <Field label="Email">
-            <TextInput type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-          </Field>
-          <Field label="Password">
-            <TextInput type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-          </Field>
-          {error && <p className="text-sm font-medium text-rose-600">{error}</p>}
-          <Button type="submit" disabled={submitting} className="w-full">
-            {submitting ? "Logging in…" : "Log in"}
-            {!submitting && <ArrowRight size={16} />}
-          </Button>
-        </form>
-        <p className="mt-5 text-center text-sm text-slate-500">
-          No account?{" "}
-          <Link href="/register" className="font-medium text-indigo-600 hover:text-indigo-700">
-            Register
+    <AuthLayout
+      title="Welcome back"
+      subtitle="Log in to pick up where your applications left off."
+      footer={
+        <>
+          New to Pathlight?{" "}
+          <Link href="/register" className="font-semibold text-accent-fg hover:underline">
+            Create an account
           </Link>
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <form onSubmit={onSubmit} className="space-y-5">
+        <Field label="Email">
+          <TextInput
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="you@college.edu"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </Field>
+        <Field label="Password">
+          <PasswordInput
+            required
+            autoComplete="current-password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </Field>
+        {error && <Alert tone="bad">{error}</Alert>}
+        <Button type="submit" size="lg" loading={submitting} className="w-full">
+          {submitting ? "Logging in…" : "Log in"}
+          {!submitting && <ArrowRight size={17} />}
+        </Button>
+      </form>
+    </AuthLayout>
   );
 }

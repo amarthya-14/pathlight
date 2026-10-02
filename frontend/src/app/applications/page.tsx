@@ -1,87 +1,113 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, Plus } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
-import type { ApplicationOut } from "@/lib/types";
-import { EmptyState, PageHeader } from "@/components/ui";
+import type { ApplicationOut, ApplicationStage } from "@/lib/types";
+import { currentStage } from "@/lib/stages";
+import { ApplicationRow } from "@/components/ApplicationRow";
+import { buttonClasses, EmptyState, PageHeader, Skeleton } from "@/components/ui";
 
-const STAGE_STYLE: Record<string, string> = {
-  DISCOVERED: "bg-slate-100 text-slate-600",
-  ELIGIBILITY_CHECKED: "bg-slate-100 text-slate-600",
-  PREPARING: "bg-indigo-50 text-indigo-600",
-  READY_TO_APPLY: "bg-violet-50 text-violet-600",
-  APPLIED: "bg-blue-50 text-blue-600",
-  OA: "bg-amber-50 text-amber-600",
-  INTERVIEW: "bg-amber-50 text-amber-600",
-  OFFER: "bg-emerald-50 text-emerald-600",
-  REJECTED: "bg-rose-50 text-rose-600",
-};
-
-function currentStage(app: ApplicationOut): string {
-  if (app.status_history.length === 0) return "—";
-  return app.status_history[app.status_history.length - 1].stage;
-}
+const GROUPS: { key: string; label: string; stages: ApplicationStage[] | null }[] = [
+  { key: "all", label: "All", stages: null },
+  { key: "review", label: "To review", stages: ["READY_TO_APPLY", "MANUAL_APPLY_REQUIRED"] },
+  { key: "progress", label: "In progress", stages: ["DISCOVERED", "ELIGIBILITY_CHECKED", "PREPARING"] },
+  { key: "applied", label: "Applied", stages: ["APPLIED", "OA", "INTERVIEW", "OFFER"] },
+  { key: "closed", label: "Closed", stages: ["REJECTED", "SKIPPED_BY_USER"] },
+];
 
 export default function ApplicationsPage() {
   const { user, loading: authLoading } = useRequireAuth();
   const [applications, setApplications] = useState<ApplicationOut[] | null>(null);
+  const [group, setGroup] = useState("all");
 
   useEffect(() => {
     if (user) api.listApplications().then(setApplications).catch(() => setApplications([]));
   }, [user]);
 
+  const counts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const g of GROUPS) {
+      out[g.key] = (applications ?? []).filter((a) => {
+        const s = currentStage(a);
+        return g.stages === null || (s !== null && g.stages.includes(s));
+      }).length;
+    }
+    return out;
+  }, [applications]);
+
   if (authLoading || !user) return null;
 
+  const active = GROUPS.find((g) => g.key === group)!;
+  const visible = (applications ?? []).filter((a) => {
+    const s = currentStage(a);
+    return active.stages === null || (s !== null && active.stages.includes(s));
+  });
+
   return (
-    <div className="animate-fade-in space-y-6">
-      <PageHeader title="Applications" subtitle="Every opportunity you've ingested, with its current stage." />
+    <div className="space-y-8">
+      <div className="animate-fade-in">
+        <PageHeader
+          eyebrow="Apply"
+          title="Applications"
+          subtitle="Every opportunity in your pipeline and where it stands — from discovered to applied."
+          actions={
+            <Link href="/opportunities" className={buttonClasses("secondary", "md")}>
+              <Plus size={16} /> Add
+            </Link>
+          }
+        />
+      </div>
+
+      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <div className="flex w-max gap-2">
+          {GROUPS.map((g) => (
+            <button
+              key={g.key}
+              onClick={() => setGroup(g.key)}
+              className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-all ${
+                group === g.key
+                  ? "border-transparent bg-brand-gradient text-white shadow-glow"
+                  : "border-line bg-surface-2 text-muted hover:border-line-strong hover:text-fg"
+              }`}
+            >
+              {g.label}
+              <span
+                className={`rounded-full px-1.5 text-xs tabular-nums ${group === g.key ? "bg-white/20" : "bg-surface-hover text-subtle"}`}
+              >
+                {counts[g.key] ?? 0}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {applications === null ? (
-        <div className="flex h-40 items-center justify-center">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-500" />
+        <div className="space-y-2.5">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-[68px]" />
+          ))}
         </div>
       ) : applications.length === 0 ? (
-        <EmptyState icon={ClipboardList} title="No applications yet" description="Ingest an opportunity to start one." />
+        <EmptyState
+          icon={ClipboardList}
+          title="No applications yet"
+          description="Analyse an opportunity or connect Gmail to start your pipeline."
+          action={
+            <Link href="/opportunities" className={buttonClasses("primary", "md")}>
+              <Plus size={16} /> Add an opportunity
+            </Link>
+          }
+        />
+      ) : visible.length === 0 ? (
+        <p className="py-12 text-center text-sm text-muted">Nothing in “{active.label}” right now.</p>
       ) : (
-        <div className="card-shadow overflow-hidden rounded-2xl border border-slate-200 bg-white">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/60 text-xs uppercase tracking-wide text-slate-400">
-                <th className="px-5 py-3 font-medium">Company</th>
-                <th className="px-5 py-3 font-medium">Role</th>
-                <th className="px-5 py-3 font-medium">Stage</th>
-                <th className="px-5 py-3 font-medium">Deadline</th>
-              </tr>
-            </thead>
-            <tbody>
-              {applications.map((app) => {
-                const stage = currentStage(app);
-                return (
-                  <tr key={app.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
-                    <td className="px-5 py-3.5">
-                      <Link href={`/applications/${app.id}`} className="font-medium text-indigo-600 hover:text-indigo-700">
-                        {app.company_name}
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3.5 text-slate-600">{app.role}</td>
-                    <td className="px-5 py-3.5">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${STAGE_STYLE[stage] ?? "bg-slate-100 text-slate-600"}`}
-                      >
-                        {stage.replace(/_/g, " ")}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 text-slate-500">
-                      {app.deadline ? new Date(app.deadline).toLocaleDateString() : "—"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="stagger space-y-2.5">
+          {visible.map((app) => (
+            <ApplicationRow key={app.id} app={app} />
+          ))}
         </div>
       )}
     </div>

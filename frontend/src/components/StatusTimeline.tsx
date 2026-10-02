@@ -1,47 +1,47 @@
-import { Check } from "lucide-react";
-import type { ApplicationStatusEvent } from "@/lib/types";
+import type { ApplicationStage, ApplicationStatusEvent } from "@/lib/types";
+import { STAGE_META } from "@/lib/stages";
 
-const STAGE_LABELS: Record<string, string> = {
-  DISCOVERED: "Discovered",
-  ELIGIBILITY_CHECKED: "Eligibility Checked",
-  PREPARING: "Preparing",
-  READY_TO_APPLY: "Ready to Apply",
-  APPLIED: "Applied",
-  OA: "Online Assessment",
-  INTERVIEW: "Interview",
-  OFFER: "Offer",
-  REJECTED: "Rejected",
-  MANUAL_APPLY_REQUIRED: "Apply Manually",
-  SKIPPED_BY_USER: "Skipped",
+const DOT: Record<string, string> = {
+  neutral: "bg-subtle",
+  accent: "bg-accent",
+  info: "bg-info",
+  ok: "bg-ok",
+  warn: "bg-warn",
+  bad: "bg-bad",
 };
 
 export function StatusTimeline({ history }: { history: ApplicationStatusEvent[] }) {
   if (history.length === 0) {
-    return <p className="text-sm text-slate-400">No status history yet.</p>;
+    return <p className="text-sm text-subtle">No status history yet.</p>;
   }
 
+  // Newest first — what happened most recently is what you came to see.
+  const events = [...history].reverse();
+
   return (
-    <ol className="space-y-0">
-      {history.map((event, i) => {
-        const isLast = i === history.length - 1;
+    <ol className="relative">
+      {events.map((event, i) => {
+        const meta = STAGE_META[event.stage as ApplicationStage];
+        const latest = i === 0;
         return (
-          <li key={i} className="flex gap-3">
-            <div className="flex flex-col items-center">
+          <li key={i} className="relative flex gap-4 pb-6 last:pb-0">
+            {i < events.length - 1 && <span className="absolute left-[7px] top-5 h-full w-px bg-line" />}
+            <span className="relative mt-1 flex h-[15px] w-[15px] shrink-0 items-center justify-center">
+              {latest && <span className="absolute inset-0 animate-ping rounded-full bg-accent/40" />}
               <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-                  isLast ? "bg-indigo-600" : "bg-emerald-500"
+                className={`relative h-[15px] w-[15px] rounded-full border-[3px] border-bg-elevated ${DOT[meta?.tone ?? "neutral"]} ${
+                  latest ? "ring-2 ring-accent/40" : ""
                 }`}
-              >
-                <Check size={13} className="text-white" strokeWidth={3} />
-              </span>
-              {!isLast && <span className="my-0.5 w-px flex-1 bg-slate-200" />}
-            </div>
-            <div className={`pb-5 ${isLast ? "" : ""}`}>
-              <div className="pt-0.5 text-sm font-semibold text-slate-800">
-                {STAGE_LABELS[event.stage] ?? event.stage}
+              />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <span className={`text-sm font-semibold ${latest ? "text-fg" : "text-muted"}`}>{meta?.label ?? event.stage}</span>
+                <span className="text-xs text-subtle">
+                  {new Date(event.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                </span>
               </div>
-              <div className="text-xs text-slate-400">{new Date(event.created_at).toLocaleString()}</div>
-              {event.note && <div className="mt-1 text-sm text-slate-600">{event.note}</div>}
+              {event.note && <div className="mt-1 text-sm leading-relaxed text-muted">{event.note}</div>}
             </div>
           </li>
         );

@@ -49,7 +49,7 @@ describe("LoginPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Log in/ }));
 
     await waitFor(() => expect(loginMock).toHaveBeenCalledWith("student@example.com", "supersecret"));
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/dashboard"));
   });
 
   it("shows the ApiError detail message when login fails", async () => {
@@ -72,6 +72,6 @@ describe("LoginPage", () => {
   it("redirects home immediately when already authenticated", () => {
     mockUser = { id: "1", email: "student@example.com", full_name: null };
     render(<LoginPage />);
-    expect(replaceMock).toHaveBeenCalledWith("/");
+    expect(replaceMock).toHaveBeenCalledWith("/dashboard");
   });
 });

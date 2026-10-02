@@ -49,11 +49,11 @@ describe("RegisterPage", () => {
     fireEvent.change(container.querySelector("input[type=password]")!, {
       target: { value: "supersecret" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Register/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Create account/ }));
 
     await waitFor(() => expect(registerMock).toHaveBeenCalledWith("student@example.com", "supersecret"));
     await waitFor(() => expect(loginMock).toHaveBeenCalledWith("student@example.com", "supersecret"));
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/dashboard"));
   });
 
   it("shows the ApiError detail message when registration fails (e.g. duplicate email)", async () => {
@@ -67,7 +67,7 @@ describe("RegisterPage", () => {
     fireEvent.change(container.querySelector("input[type=password]")!, {
       target: { value: "supersecret" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Register/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Create account/ }));
 
     expect(await screen.findByText("Email already registered")).toBeInTheDocument();
     expect(loginMock).not.toHaveBeenCalled();
@@ -77,6 +77,6 @@ describe("RegisterPage", () => {
   it("redirects home immediately when already authenticated", () => {
     mockUser = { id: "1", email: "student@example.com", full_name: null };
     render(<RegisterPage />);
-    expect(replaceMock).toHaveBeenCalledWith("/");
+    expect(replaceMock).toHaveBeenCalledWith("/dashboard");
   });
 });
