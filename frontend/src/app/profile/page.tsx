@@ -1,28 +1,49 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Code2, FileText, GraduationCap, Loader2, Save, UploadCloud } from "lucide-react";
+import { CheckCircle2, Code2, FileText, Loader2, UploadCloud } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth-context";
 import { api, ApiError } from "@/lib/api";
 import type { DocumentOut, ProfileOut } from "@/lib/types";
-import { Alert, Button, Card, Field, PageHeader, PageSkeleton, TextArea, TextInput } from "@/components/ui";
+import { useToast } from "@/components/Toast";
+import { Alert, Button, Card, Field, PageHeader, PageSkeleton, Progress, TextArea, TextInput } from "@/components/ui";
 
 const BRANCHES = ["CSE", "IT", "AI & DS", "AI & ML", "ECE", "EEE", "EIE", "ME", "CE", "Chemical", "Biotech"];
+const EXPERIENCE = [
+  { value: "0", label: "Fresher (no full-time experience)" },
+  { value: "0.5", label: "Less than 1 year" },
+  { value: "1", label: "1 year" },
+  { value: "2", label: "2 years" },
+  { value: "3", label: "3 years" },
+  { value: "5", label: "5+ years" },
+];
+
+function Section({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+  return (
+    <div className="grid gap-4 border-t border-line py-8 first:border-t-0 first:pt-0 md:grid-cols-[260px_1fr] md:gap-10">
+      <div>
+        <h2 className="text-[15px] font-semibold text-fg">{title}</h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-muted">{description}</p>
+      </div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
 
 export default function ProfilePage() {
   const { user, loading: authLoading } = useRequireAuth();
+  const toast = useToast();
   const [profile, setProfile] = useState<ProfileOut | null>(null);
   const [cgpa, setCgpa] = useState("");
   const [branch, setBranch] = useState("");
+  const [experience, setExperience] = useState("0");
   const [githubUsername, setGithubUsername] = useState("");
   const [saving, setSaving] = useState(false);
-  const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [documents, setDocuments] = useState<DocumentOut[]>([]);
   const [resumeText, setResumeText] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [resumeMessage, setResumeMessage] = useState<string | null>(null);
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [showPaste, setShowPaste] = useState(false);
@@ -38,6 +59,7 @@ export default function ProfilePage() {
       setProfile(p);
       setCgpa(p.cgpa?.toString() ?? "");
       setBranch(p.branch ?? "");
+      setExperience(p.experience_years?.toString() ?? "0");
       setGithubUsername(p.github_username ?? "");
     });
     loadDocuments();
@@ -46,7 +68,6 @@ export default function ProfilePage() {
   const onSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    setProfileMessage(null);
     setError(null);
     try {
       setProfile(
@@ -54,9 +75,10 @@ export default function ProfilePage() {
           cgpa: cgpa ? Number(cgpa) : null,
           branch: branch || null,
           github_username: githubUsername || null,
+          experience_years: Number(experience),
         })
       );
-      setProfileMessage("Saved — eligibility checks will use these details.");
+      toast("Profile saved", { description: "Use “Re-check” on an application to apply the new details to it." });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Failed to save profile");
     } finally {
@@ -68,16 +90,15 @@ export default function ProfilePage() {
   const uploadFile = async (file: File) => {
     setUploading(true);
     setResumeError(null);
-    setResumeMessage(null);
     try {
       const doc = await api.uploadDocument(file, "resume");
       loadDocuments();
       if (!doc.extracted_text || !doc.extracted_text.trim()) {
         setResumeError(
-          "Uploaded, but no text could be read from this file (likely a scanned/image PDF). Export your resume as a text-based PDF, or paste the text instead."
+          "Uploaded, but no text could be read from this file (likely a scanned or image PDF). Export your resume as a text-based PDF, or paste the text instead."
         );
       } else {
-        setResumeMessage("Resume uploaded and indexed. Open any application and click “Generate tailored resume”.");
+        toast("Resume uploaded", { description: "Open any application and generate a tailored resume." });
       }
     } catch (err) {
       setResumeError(err instanceof ApiError ? err.detail : "Failed to upload resume");
@@ -96,7 +117,7 @@ export default function ProfilePage() {
       setResumeText("");
       setShowPaste(false);
       loadDocuments();
-      setResumeMessage("Resume saved and indexed. Skill Gap results now use it as real evidence.");
+      toast("Resume saved");
     } catch (err) {
       setResumeError(err instanceof ApiError ? err.detail : "Failed to save resume");
     } finally {
@@ -108,39 +129,27 @@ export default function ProfilePage() {
   if (!profile) return <PageSkeleton />;
 
   const latestResume = documents.find((d) => d.doc_type === "resume"); // list is newest-first
-  const completeness = [Boolean(profile.cgpa), Boolean(profile.branch), Boolean(latestResume), Boolean(profile.github_username)].filter(Boolean).length;
+  const completeness = [Boolean(profile.cgpa), Boolean(profile.branch), profile.experience_years !== null, Boolean(latestResume)].filter(Boolean).length;
 
   return (
-    <div className="space-y-8">
+    <div className="max-w-4xl">
       <div className="animate-fade-in">
         <PageHeader
-          eyebrow="You"
           title="Profile"
           subtitle="Your details power eligibility checks, skill gaps and tailored resumes."
           actions={
-            <div className="glass flex items-center gap-3 rounded-xl px-3.5 py-2">
-              <div className="h-1.5 w-24 overflow-hidden rounded-full bg-surface-2">
-                <div className="h-full rounded-full bg-brand-gradient transition-all duration-700" style={{ width: `${completeness * 25}%` }} />
-              </div>
-              <span className="text-xs font-medium text-muted">{completeness * 25}% complete</span>
+            <div className="flex items-center gap-3 text-[13px] text-muted">
+              <Progress value={completeness * 25} tone="ok" className="w-24" />
+              {completeness * 25}% complete
             </div>
           }
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.15fr]">
-        <Card className="animate-fade-in p-5 sm:p-6">
-          <div className="mb-5 flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent-fg">
-              <GraduationCap size={19} />
-            </span>
-            <div>
-              <div className="font-semibold text-fg">Academic details</div>
-              <div className="text-xs text-muted">Used to check eligibility criteria</div>
-            </div>
-          </div>
-          <form onSubmit={onSaveProfile} className="space-y-5">
-            <div className="grid grid-cols-2 gap-4">
+      <Card className="p-5 sm:p-7">
+        <Section title="Academic details" description="Checked against each posting's CGPA, branch and experience requirements.">
+          <form onSubmit={onSaveProfile} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <Field label="CGPA">
                 <TextInput type="number" step="0.01" min="0" max="10" placeholder="8.50" value={cgpa} onChange={(e) => setCgpa(e.target.value)} />
               </Field>
@@ -153,46 +162,48 @@ export default function ProfilePage() {
                 </datalist>
               </Field>
             </div>
-            <Field
-              label="GitHub username (optional)"
-              hint="Adds supporting evidence from your public repos to Skill Gap — it never changes the verdict itself."
-            >
+            <Field label="Work experience" hint="Full-time experience only — internships don't count toward a posting's “X years” requirement.">
+              <select
+                value={experience}
+                onChange={(e) => setExperience(e.target.value)}
+                className="h-9 w-full rounded-lg border border-line-strong bg-surface px-3 text-sm text-fg shadow-xs focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/15"
+              >
+                {EXPERIENCE.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="GitHub username" hint="Optional. Adds supporting evidence from your public repos to Skill Gap — it never changes the verdict itself.">
               <div className="relative">
-                <Code2 size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-subtle" />
-                <TextInput type="text" value={githubUsername} onChange={(e) => setGithubUsername(e.target.value)} placeholder="octocat" className="pl-10" />
+                <Code2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-subtle" />
+                <TextInput type="text" value={githubUsername} onChange={(e) => setGithubUsername(e.target.value)} placeholder="octocat" className="pl-8" />
               </div>
             </Field>
-            {profileMessage && <Alert tone="ok">{profileMessage}</Alert>}
             {error && <Alert tone="bad">{error}</Alert>}
-            <Button type="submit" loading={saving} className="w-full sm:w-auto">
-              {!saving && <Save size={15} />} {saving ? "Saving…" : "Save details"}
-            </Button>
-          </form>
-        </Card>
-
-        <Card className="animate-fade-in p-5 sm:p-6" style={{ animationDelay: "0.06s" }}>
-          <div className="mb-5 flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent-fg">
-              <FileText size={19} />
-            </span>
-            <div>
-              <div className="font-semibold text-fg">Resume</div>
-              <div className="text-xs text-muted">The single source of truth for tailoring — we never add to it</div>
+            <div className="flex justify-end">
+              <Button type="submit" loading={saving}>
+                {saving ? "Saving…" : "Save changes"}
+              </Button>
             </div>
-          </div>
+          </form>
+        </Section>
 
+        <Section title="Resume" description="The single source of truth for tailoring. Pathlight rewords it per role, but never adds to it.">
           {latestResume ? (
-            <div className="mb-4 flex items-center gap-3 rounded-xl border border-ok/20 bg-ok-soft px-4 py-3">
-              <CheckCircle2 size={18} className="shrink-0 text-ok" />
+            <div className="mb-3 flex items-center gap-3 rounded-lg border border-line bg-surface-2 px-3.5 py-3">
+              <FileText size={16} className="shrink-0 text-muted" />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold text-fg">{latestResume.original_filename}</div>
-                <div className="text-xs text-muted">
-                  In use since {new Date(latestResume.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+                <div className="truncate text-[13px] font-medium text-fg">{latestResume.original_filename}</div>
+                <div className="text-xs text-subtle">
+                  Uploaded {new Date(latestResume.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
                 </div>
               </div>
+              <CheckCircle2 size={16} className="shrink-0 text-ok" />
             </div>
           ) : (
-            <Alert tone="warn" className="mb-4">
+            <Alert tone="warn" className="mb-3">
               No resume yet — skill gaps will show everything as missing, and tailoring is disabled.
             </Alert>
           )}
@@ -209,18 +220,18 @@ export default function ProfilePage() {
               const file = e.dataTransfer.files?.[0];
               if (file) uploadFile(file);
             }}
-            className={`group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-5 py-9 text-center transition-all ${
-              dragging ? "scale-[1.01] border-accent bg-accent-soft" : "border-line-strong bg-surface-2 hover:border-accent/60 hover:bg-accent-soft/50"
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-5 py-8 text-center transition-colors ${
+              dragging ? "border-accent bg-accent-soft" : "border-line-strong hover:border-subtle hover:bg-surface-2"
             }`}
           >
-            <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-gradient text-white shadow-glow transition-transform group-hover:-translate-y-0.5">
-              {uploading ? <Loader2 size={22} className="animate-spin" /> : <UploadCloud size={22} />}
+            <span className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-surface shadow-xs">
+              {uploading ? <Loader2 size={16} className="animate-spin text-muted" /> : <UploadCloud size={16} className="text-muted" />}
             </span>
-            <span className="text-sm font-semibold text-fg">
-              {uploading ? "Uploading & indexing…" : latestResume ? "Drop a new resume to replace it" : "Drop your resume here"}
+            <span className="text-[13px] font-medium text-fg">
+              {uploading ? "Uploading and indexing…" : latestResume ? "Drop a new resume to replace it" : "Drop your resume here"}
             </span>
-            <span className="mt-1 text-xs text-muted">
-              or <span className="font-semibold text-accent-fg">browse</span> · PDF or TXT, up to 10MB · text-based PDFs only
+            <span className="mt-1 text-xs text-subtle">
+              or <span className="font-medium text-fg underline underline-offset-2">browse</span> · PDF or TXT up to 10MB · text-based PDFs only
             </span>
             <input
               ref={fileInput}
@@ -236,26 +247,25 @@ export default function ProfilePage() {
             />
           </label>
 
-          {resumeMessage && <Alert tone="ok" className="mt-4">{resumeMessage}</Alert>}
-          {resumeError && <Alert tone="bad" className="mt-4">{resumeError}</Alert>}
+          {resumeError && (
+            <Alert tone="bad" className="mt-3">
+              {resumeError}
+            </Alert>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setShowPaste((v) => !v)}
-            className="mt-4 text-xs font-medium text-muted underline-offset-4 hover:text-fg hover:underline"
-          >
+          <button type="button" onClick={() => setShowPaste((v) => !v)} className="mt-3 text-xs text-muted underline-offset-4 hover:text-fg hover:underline">
             {showPaste ? "Hide text paste" : "Or paste resume text instead"}
           </button>
           {showPaste && (
-            <form onSubmit={onPasteResume} className="animate-fade-in mt-3 space-y-3">
+            <form onSubmit={onPasteResume} className="animate-fade-in mt-3 space-y-2">
               <TextArea required rows={7} value={resumeText} onChange={(e) => setResumeText(e.target.value)} placeholder="Paste your resume text here…" />
               <Button type="submit" variant="secondary" loading={uploading}>
                 Save pasted resume
               </Button>
             </form>
           )}
-        </Card>
-      </div>
+        </Section>
+      </Card>
     </div>
   );
 }

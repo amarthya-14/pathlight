@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, BadgeCheck, BookOpenCheck, Briefcase, Check, Inbox, Search, ScanSearch, Sparkles, Wand2 } from "lucide-react";
+import { ArrowRight, BadgeCheck, BookOpenCheck, Briefcase, Check, Inbox, Loader2, Search, ScanSearch, Sparkles, Wand2 } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth-context";
 import { api, ApiError } from "@/lib/api";
 import type { ApplicationOut, IngestResponse } from "@/lib/types";
-import { ApplicationRow } from "@/components/ApplicationRow";
+import { ApplicationRow, RowList } from "@/components/ApplicationRow";
 import { EligibilityCard } from "@/components/EligibilityCard";
 import { SkillGapCard } from "@/components/SkillGapCard";
+import { useToast } from "@/components/Toast";
 import { Alert, Button, buttonClasses, Card, CompanyAvatar, EmptyState, PageHeader, SectionLabel, Skeleton, TextArea } from "@/components/ui";
 
 // The agents run server-side in one request; this is an honest *indication* of the
@@ -22,48 +23,41 @@ const AGENT_STEPS = [
 ];
 
 const SAMPLE =
-  "Acme Labs is hiring a Backend Engineering Intern (Bengaluru, 6 months).\nRequired: Python, SQL, REST APIs. Preferred: Docker, AWS.\nEligibility: B.Tech CSE/IT, minimum CGPA 7.0.\nApply by 30 Oct — email your resume to careers@acmelabs.dev";
+  "Acme Labs is hiring a Backend Engineering Intern (Bengaluru, 6 months).\nRequired: Python, SQL, REST APIs. Preferred: Docker, AWS.\nEligibility: B.Tech CSE/IT, minimum CGPA 7.0. Freshers welcome.\nApply by 30 Oct — email your resume to careers@acmelabs.dev";
 
-function AgentProgress({ step }: { step: number }) {
+function AgentSteps({ step, running }: { step: number; running: boolean }) {
   return (
-    <Card glow className="animate-scale-in p-5 sm:p-6">
-      <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-fg">
-        <span className="relative flex h-2.5 w-2.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-70" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-accent" />
-        </span>
-        Pathlight agents at work…
-      </div>
-      <ol className="space-y-2">
-        {AGENT_STEPS.map(({ icon: Icon, label }, i) => {
-          const done = i < step;
-          const active = i === step;
-          return (
-            <li
-              key={label}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-300 ${
-                active ? "bg-accent-soft text-fg" : done ? "text-muted" : "text-subtle opacity-60"
-              }`}
-            >
-              <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all ${
-                  done ? "bg-ok text-white" : active ? "bg-brand-gradient text-white shadow-glow" : "bg-surface-2"
-                }`}
-              >
-                {done ? <Check size={14} strokeWidth={2.8} /> : <Icon size={14} className={active ? "animate-pulse" : ""} />}
-              </span>
-              {label}
-              {active && <span className="travel-line ml-auto h-1 w-16 rounded-full bg-surface-2" />}
-            </li>
-          );
-        })}
-      </ol>
-    </Card>
+    <ol className="space-y-1">
+      {AGENT_STEPS.map(({ icon: Icon, label }, i) => {
+        const done = running && i < step;
+        const active = running && i === step;
+        return (
+          <li
+            key={label}
+            className={`flex items-center gap-3 rounded-lg px-2.5 py-2 text-[13px] transition-colors ${
+              active ? "bg-surface-hover text-fg" : done ? "text-muted" : "text-subtle"
+            }`}
+          >
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center">
+              {done ? (
+                <Check size={15} className="text-ok" strokeWidth={2.6} />
+              ) : active ? (
+                <Loader2 size={15} className="animate-spin text-fg" />
+              ) : (
+                <Icon size={15} strokeWidth={1.8} />
+              )}
+            </span>
+            {label}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
 export default function OpportunitiesPage() {
   const { user, loading: authLoading } = useRequireAuth();
+  const toast = useToast();
   const [applications, setApplications] = useState<ApplicationOut[] | null>(null);
   const [rawText, setRawText] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -82,9 +76,12 @@ export default function OpportunitiesPage() {
     if (user) loadApplications();
   }, [user]);
 
-  useEffect(() => () => {
-    if (timer.current) clearInterval(timer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (timer.current) clearInterval(timer.current);
+    },
+    []
+  );
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +95,7 @@ export default function OpportunitiesPage() {
       setResult(res);
       setRawText("");
       loadApplications();
+      toast("Opportunity analysed", { description: `${res.role} at ${res.company_name}` });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Ingestion failed");
     } finally {
@@ -123,25 +121,19 @@ export default function OpportunitiesPage() {
     <div className="space-y-10">
       <div className="animate-fade-in">
         <PageHeader
-          eyebrow="Discover"
           title="Opportunities"
-          subtitle="Paste any job description or placement email. Five agents extract the details, check your eligibility, compare skills, plan your prep and tailor your resume."
+          subtitle="Paste any job description or placement email. Pathlight extracts the details, checks your eligibility, compares skills, plans your prep and tailors your resume."
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.25fr_1fr]">
-        <Card className="animate-fade-in p-5 sm:p-6" style={{ animationDelay: "0.05s" }}>
-          <form onSubmit={onSubmit} className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+        <Card className="p-4 sm:p-5">
+          <form onSubmit={onSubmit} className="space-y-3">
             <div className="flex items-center justify-between">
-              <label htmlFor="jd" className="text-sm font-semibold text-fg">
+              <label htmlFor="jd" className="text-[13px] font-medium text-fg">
                 Job description or email
               </label>
-              <button
-                type="button"
-                onClick={() => setRawText(SAMPLE)}
-                className="text-xs font-medium text-accent-fg hover:underline"
-                disabled={submitting}
-              >
+              <button type="button" onClick={() => setRawText(SAMPLE)} className="text-[13px] text-muted hover:text-fg" disabled={submitting}>
                 Try a sample
               </button>
             </div>
@@ -151,63 +143,58 @@ export default function OpportunitiesPage() {
               rows={9}
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
-              placeholder={"Paste the full posting here — role, company, requirements, eligibility, how to apply…"}
+              placeholder="Paste the full posting — role, company, requirements, eligibility, how to apply…"
               disabled={submitting}
             />
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-xs text-subtle">{rawText.length > 0 ? `${rawText.length.toLocaleString()} characters` : "Takes ~20–40 seconds"}</span>
-              <Button type="submit" size="lg" loading={submitting} disabled={!rawText.trim()}>
+              <span className="text-xs text-subtle">
+                {rawText.length > 0 ? `${rawText.length.toLocaleString()} characters` : "Usually takes 20–40 seconds"}
+              </span>
+              <Button type="submit" loading={submitting} disabled={!rawText.trim()}>
                 {submitting ? "Analysing…" : "Analyse opportunity"}
-                {!submitting && <Sparkles size={16} />}
               </Button>
             </div>
             {error && <Alert tone="bad">{error}</Alert>}
           </form>
         </Card>
 
-        <div className="animate-fade-in" style={{ animationDelay: "0.1s" }}>
-          {submitting ? (
-            <AgentProgress step={step} />
-          ) : result ? (
-            <Card glow className="animate-scale-in p-5 sm:p-6">
-              <div className="flex items-center gap-3">
-                <CompanyAvatar name={result.company_name} />
-                <div className="min-w-0">
-                  <div className="text-xs font-medium text-ok">Added to your pipeline</div>
-                  <div className="truncate font-semibold text-fg">{result.role}</div>
-                  <div className="truncate text-sm text-muted">{result.company_name}</div>
-                </div>
+        {result && !submitting ? (
+          <Card className="animate-scale-in flex flex-col p-5">
+            <div className="text-[13px] font-medium text-ok">Added to your pipeline</div>
+            <div className="mt-3 flex items-center gap-3">
+              <CompanyAvatar name={result.company_name} />
+              <div className="min-w-0">
+                <div className="truncate text-[15px] font-semibold text-fg">{result.role}</div>
+                <div className="truncate text-[13px] text-muted">{result.company_name}</div>
               </div>
-              <Link href={`/applications/${result.application_id}`} className={buttonClasses("primary", "lg", "mt-5 w-full")}>
-                Open application <ArrowRight size={16} />
+            </div>
+            <div className="mt-auto pt-5">
+              <Link href={`/applications/${result.application_id}`} className={buttonClasses("primary", "md", "w-full")}>
+                Open application <ArrowRight size={14} />
               </Link>
-            </Card>
-          ) : (
-            <Card className="flex h-full flex-col p-5 sm:p-6">
-              <div className="text-sm font-semibold text-fg">What happens when you click Analyse</div>
-              <ol className="mt-4 flex-1 space-y-2">
-                {AGENT_STEPS.map(({ icon: Icon, label }, i) => (
-                  <li key={label} className="flex items-center gap-3 text-sm text-muted">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-accent-fg">
-                      <Icon size={14} />
-                    </span>
-                    <span className="text-subtle">{i + 1}.</span> {label}
-                  </li>
-                ))}
-              </ol>
-              <div className="mt-5 rounded-xl border border-line bg-surface-2 p-3.5 text-sm text-muted">
-                Tired of pasting? Connect Gmail and LinkedIn/Naukri alerts arrive here already analysed.
-                <Link href="/integrations" className="mt-2 flex items-center gap-1.5 font-semibold text-accent-fg hover:underline">
-                  <Inbox size={15} /> Connect Gmail <ArrowRight size={14} />
-                </Link>
-              </div>
-            </Card>
-          )}
-        </div>
+            </div>
+          </Card>
+        ) : (
+          <Card className="flex flex-col p-4 sm:p-5">
+            <div className="text-[13px] font-medium text-fg">{submitting ? "Working on it…" : "What happens next"}</div>
+            <div className="mt-3 flex-1">
+              <AgentSteps step={step} running={submitting} />
+            </div>
+            {!submitting && (
+              <Link
+                href="/integrations"
+                className="mt-4 flex items-center gap-2 rounded-lg border border-line px-3 py-2.5 text-[13px] text-muted transition-colors hover:bg-surface-hover hover:text-fg"
+              >
+                <Inbox size={14} /> Tired of pasting? Connect Gmail
+                <ArrowRight size={13} className="ml-auto" />
+              </Link>
+            )}
+          </Card>
+        )}
       </div>
 
       {result && (
-        <div className="grid animate-fade-in gap-4 lg:grid-cols-2">
+        <div className="animate-fade-in grid gap-4 lg:grid-cols-2">
           {result.eligibility && <EligibilityCard eligibility={result.eligibility} />}
           {result.skill_gap && <SkillGapCard skillGap={result.skill_gap} skillGapNote={result.skill_gap_note} />}
         </div>
@@ -215,53 +202,49 @@ export default function OpportunitiesPage() {
 
       <section>
         <SectionLabel>All opportunities</SectionLabel>
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex gap-1 rounded-xl border border-line bg-surface-2 p-1">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="inline-flex w-fit rounded-lg border border-line bg-surface-2 p-0.5">
             {(
               [
-                ["all", `All${applications ? ` · ${applications.length}` : ""}`],
-                ["gmail", `From Gmail · ${gmailCount}`],
-                ["manual", "Added by you"],
+                ["all", "All", applications?.length ?? 0],
+                ["gmail", "From Gmail", gmailCount],
+                ["manual", "Added by you", (applications?.length ?? 0) - gmailCount],
               ] as const
-            ).map(([key, label]) => (
+            ).map(([key, label, count]) => (
               <button
                 key={key}
                 onClick={() => setFilter(key)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
-                  filter === key ? "bg-surface-solid text-fg shadow-card" : "text-muted hover:text-fg"
+                className={`flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px] font-medium transition-all ${
+                  filter === key ? "bg-surface text-fg shadow-xs ring-1 ring-line" : "text-muted hover:text-fg"
                 }`}
               >
-                {label}
+                {label} <span className="text-xs tabular-nums text-subtle">{count}</span>
               </button>
             ))}
           </div>
-          <div className="relative sm:w-72">
-            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-subtle" />
+          <div className="relative sm:w-64">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-subtle" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search company or role"
-              className="h-10 w-full rounded-xl border border-line bg-surface-2 pl-10 pr-3 text-sm text-fg placeholder:text-subtle focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+              placeholder="Filter by company or role"
+              className="h-8 w-full rounded-lg border border-line-strong bg-surface pl-8 pr-3 text-[13px] text-fg shadow-xs placeholder:text-subtle focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/15"
             />
           </div>
         </div>
 
         {applications === null ? (
-          <div className="space-y-2.5">
-            <Skeleton className="h-16" />
-            <Skeleton className="h-16" />
-            <Skeleton className="h-16" />
-          </div>
+          <Skeleton className="h-48" />
         ) : applications.length === 0 ? (
           <EmptyState icon={Briefcase} title="Nothing here yet" description="Analyse your first opportunity above, or connect Gmail." />
         ) : filtered.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted">No opportunities match that.</p>
         ) : (
-          <div className="stagger space-y-2.5">
+          <RowList>
             {filtered.map((app) => (
               <ApplicationRow key={app.id} app={app} />
             ))}
-          </div>
+          </RowList>
         )}
       </section>
     </div>

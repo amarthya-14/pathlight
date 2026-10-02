@@ -11,7 +11,7 @@ export type ResolvedTheme = "light" | "dark";
 
 const STORAGE_KEY = "pathlight_theme";
 
-export const THEME_INIT_SCRIPT = `(function(){try{var c=localStorage.getItem("${STORAGE_KEY}");var t=c==="light"||c==="dark"?c:(window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark");document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`;
+export const THEME_INIT_SCRIPT = `(function(){try{var c=localStorage.getItem("${STORAGE_KEY}");var t=c==="light"||c==="dark"?c:(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`;
 
 type ThemeState = {
   choice: ThemeChoice;
@@ -23,8 +23,8 @@ type ThemeState = {
 const ThemeContext = createContext<ThemeState | null>(null);
 
 function systemTheme(): ResolvedTheme {
-  if (typeof window === "undefined" || !window.matchMedia) return "dark";
-  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  if (typeof window === "undefined" || !window.matchMedia) return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 function readChoice(): ThemeChoice {
@@ -38,7 +38,7 @@ function readChoice(): ThemeChoice {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [choice, setChoiceState] = useState<ThemeChoice>("system");
-  const [resolved, setResolved] = useState<ResolvedTheme>("dark");
+  const [resolved, setResolved] = useState<ResolvedTheme>("light");
 
   const apply = useCallback((next: ThemeChoice) => {
     const theme = next === "system" ? systemTheme() : next;
@@ -51,7 +51,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setChoiceState(initial);
     apply(initial);
 
-    const media = window.matchMedia?.("(prefers-color-scheme: light)");
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
     const onSystemChange = () => {
       if (readChoice() === "system") apply("system");
     };
@@ -81,5 +81,5 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 export function useTheme(): ThemeState {
   const ctx = useContext(ThemeContext);
   // Components rendered outside the provider (e.g. isolated unit tests) get a no-op theme.
-  return ctx ?? { choice: "system", resolved: "dark", setChoice: () => {}, toggle: () => {} };
+  return ctx ?? { choice: "system", resolved: "light", setChoice: () => {}, toggle: () => {} };
 }

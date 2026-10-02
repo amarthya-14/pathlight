@@ -2,30 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  BadgeCheck,
-  CalendarClock,
-  Check,
-  Compass,
-  FileText,
-  Layers,
-  Mail,
-  Plus,
-  Send,
-  Sparkles,
-  UserRound,
-} from "lucide-react";
+import { ArrowRight, CalendarClock, Check, Compass, FileText, Layers, Mail, Plus, Send, Sparkles, UserRound } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import type { ApplicationOut, DashboardHomeOut, IntegrationOut } from "@/lib/types";
-import { currentStage } from "@/lib/stages";
-import { ApplicationRow } from "@/components/ApplicationRow";
-import { Alert, buttonClasses, Card, EmptyState, PageHeader, PageSkeleton, SectionLabel, StatCard } from "@/components/ui";
+import { currentStage, daysUntil, deadlineLabel, deadlineTone } from "@/lib/stages";
+import { ApplicationRow, RowList } from "@/components/ApplicationRow";
+import { Alert, Badge, buttonClasses, Card, CompanyAvatar, EmptyState, PageHeader, PageSkeleton, Progress, SectionLabel, StatCard } from "@/components/ui";
 
 function greeting(): string {
   const h = new Date().getHours();
-  if (h < 5) return "Burning the midnight oil";
+  if (h < 5) return "Up late";
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
@@ -33,51 +20,40 @@ function greeting(): string {
 
 function SetupChecklist({ hasProfile, hasResume, gmailConnected }: { hasProfile: boolean; hasResume: boolean; gmailConnected: boolean }) {
   const steps = [
-    { done: hasProfile, icon: UserRound, title: "Add your CGPA & branch", text: "Unlocks eligibility checks", href: "/profile" },
-    { done: hasResume, icon: FileText, title: "Upload your resume", text: "Powers skill gaps & tailoring", href: "/profile" },
-    { done: gmailConnected, icon: Mail, title: "Connect Gmail", text: "Job alerts arrive automatically", href: "/integrations" },
+    { done: hasProfile, icon: UserRound, title: "Add CGPA, branch & experience", href: "/profile" },
+    { done: hasResume, icon: FileText, title: "Upload your resume", href: "/profile" },
+    { done: gmailConnected, icon: Mail, title: "Connect Gmail for job alerts", href: "/integrations" },
   ];
   const doneCount = steps.filter((s) => s.done).length;
   if (doneCount === steps.length) return null;
-  const pct = Math.round((doneCount / steps.length) * 100);
 
   return (
-    <Card glow className="relative overflow-hidden p-5 sm:p-6">
-      <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-accent/20 blur-3xl" />
-      <div className="relative flex flex-wrap items-center justify-between gap-4">
+    <Card className="p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-fg">
-            <Sparkles size={16} className="text-accent-fg" /> Finish setting up Pathlight
-          </div>
-          <p className="mt-1 text-sm text-muted">{doneCount} of 3 done — each step makes the autopilot smarter.</p>
+          <div className="text-[15px] font-semibold text-fg">Finish setting up</div>
+          <p className="mt-0.5 text-[13px] text-muted">{doneCount} of 3 done — each step makes Pathlight more accurate.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="h-2 w-36 overflow-hidden rounded-full bg-surface-2">
-            <div className="h-full rounded-full bg-brand-gradient transition-all duration-700" style={{ width: `${pct}%` }} />
-          </div>
-          <span className="text-sm font-semibold tabular-nums text-fg">{pct}%</span>
-        </div>
+        <Progress value={(doneCount / 3) * 100} tone="ok" className="w-40" />
       </div>
-      <div className="relative mt-5 grid gap-3 sm:grid-cols-3">
-        {steps.map(({ done, icon: Icon, title, text, href }) => (
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        {steps.map(({ done, icon: Icon, title, href }) => (
           <Link
             key={title}
             href={href}
-            className={`flex items-center gap-3 rounded-xl border p-3.5 transition-all ${
-              done ? "border-ok/20 bg-ok-soft" : "border-line bg-surface-2 hover:border-line-strong hover:bg-surface-hover"
+            className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-[13px] transition-colors ${
+              done ? "border-line text-subtle" : "border-line-strong bg-surface text-fg hover:bg-surface-hover"
             }`}
           >
             <span
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                done ? "bg-ok text-white" : "bg-surface-solid text-accent-fg"
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                done ? "bg-ok text-white" : "border border-line-strong text-muted"
               }`}
             >
-              {done ? <Check size={17} strokeWidth={2.8} /> : <Icon size={17} />}
+              {done ? <Check size={13} strokeWidth={3} /> : <Icon size={12} />}
             </span>
-            <div className="min-w-0">
-              <div className={`text-sm font-semibold ${done ? "text-ok" : "text-fg"}`}>{title}</div>
-              <div className="truncate text-xs text-muted">{done ? "Done" : text}</div>
-            </div>
+            <span className={done ? "line-through decoration-line-strong" : "font-medium"}>{title}</span>
+            {!done && <ArrowRight size={13} className="ml-auto text-subtle" />}
           </Link>
         ))}
       </div>
@@ -108,16 +84,13 @@ export default function DashboardPage() {
 
   const name = user.email.split("@")[0];
   const gmailConnected = integrations.some((i) => i.provider === "gmail" && i.status === "connected");
-  const needsAttention = applications.filter((a) => {
-    const s = currentStage(a);
-    return s === "READY_TO_APPLY" || s === "MANUAL_APPLY_REQUIRED";
-  });
+  const needsAttention = applications.filter((a) => ["READY_TO_APPLY", "MANUAL_APPLY_REQUIRED"].includes(currentStage(a) ?? ""));
   const appliedCount = applications.filter((a) => a.status_history.some((e) => e.stage === "APPLIED")).length;
+  const interviewing = applications.filter((a) => ["OA", "INTERVIEW", "OFFER"].includes(currentStage(a) ?? "")).length;
   const nothingYet = data.recent_applications.length === 0;
-  const maxGap = Math.max(1, data.most_common_missing_skills.length);
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <div className="animate-fade-in">
         <PageHeader
           eyebrow={new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
@@ -129,129 +102,130 @@ export default function DashboardPage() {
           }
           actions={
             <Link href="/opportunities" className={buttonClasses("primary", "md")}>
-              <Plus size={16} /> Add opportunity
+              <Plus size={15} /> Add opportunity
             </Link>
           }
         />
       </div>
 
-      <div className="animate-fade-in" style={{ animationDelay: "0.05s" }}>
-        <SetupChecklist hasProfile={data.has_profile} hasResume={data.has_resume} gmailConnected={gmailConnected} />
-      </div>
+      <SetupChecklist hasProfile={data.has_profile} hasResume={data.has_resume} gmailConnected={gmailConnected} />
 
       {nothingYet ? (
         <EmptyState
           icon={Compass}
           title="Your pipeline is empty — for now"
-          description="Paste a job description or placement email, or connect Gmail and let job alerts flow in. Pathlight runs eligibility, skill-gap and tailoring automatically."
+          description="Paste a job description or connect Gmail and let job alerts flow in. Eligibility, skill gaps and tailoring run automatically."
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <Link href="/opportunities" className={buttonClasses("primary", "md")}>
-                <Plus size={16} /> Add your first opportunity
+                <Plus size={15} /> Add your first opportunity
               </Link>
               <Link href="/integrations" className={buttonClasses("secondary", "md")}>
-                <Mail size={16} /> Connect Gmail
+                <Mail size={15} /> Connect Gmail
               </Link>
             </div>
           }
         />
       ) : (
         <>
-          <div className="stagger grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            <StatCard icon={Layers} value={applications.length || data.recent_applications.length} label="Opportunities tracked" />
-            <StatCard icon={Sparkles} value={needsAttention.length} label="Waiting for your review" tone="accent" />
-            <StatCard icon={Send} value={appliedCount} label="Applied" tone="ok" />
-            <StatCard icon={CalendarClock} value={data.urgent_deadlines.length} label="Deadlines in 14 days" tone={data.urgent_deadlines.length > 0 ? "warn" : "neutral"} />
+          <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard icon={Layers} value={applications.length || data.recent_applications.length} label="Tracked" />
+            <StatCard icon={Sparkles} value={needsAttention.length} label="To review" tone={needsAttention.length ? "accent" : "neutral"} />
+            <StatCard icon={Send} value={appliedCount} label="Applied" />
+            <StatCard icon={CalendarClock} value={interviewing} label="In interviews" tone={interviewing ? "ok" : "neutral"} />
           </div>
 
-          {needsAttention.length > 0 && (
-            <section className="animate-fade-in">
-              <SectionLabel
-                action={
-                  <Link href="/applications" className="inline-flex items-center gap-1 text-xs font-semibold text-accent-fg hover:underline">
-                    All applications <ArrowRight size={13} />
-                  </Link>
-                }
-              >
-                Needs your attention
-              </SectionLabel>
-              <div className="stagger space-y-2.5">
-                {needsAttention.slice(0, 5).map((app) => (
-                  <ApplicationRow key={app.id} app={app} />
-                ))}
-              </div>
-            </section>
-          )}
-
-          <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-            <section>
-              <SectionLabel>Closing soon</SectionLabel>
-              {data.urgent_deadlines.length === 0 ? (
-                <Card className="flex items-center gap-3 p-5 text-sm text-muted">
-                  <BadgeCheck size={18} className="text-ok" /> Nothing due in the next 14 days.
-                </Card>
-              ) : (
-                <div className="stagger space-y-2.5">
-                  {data.urgent_deadlines.map((app) => (
+          <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+            <div className="space-y-6">
+              {needsAttention.length > 0 && (
+                <section>
+                  <SectionLabel
+                    action={
+                      <Link href="/applications" className="flex items-center gap-1 text-[13px] text-muted hover:text-fg">
+                        View all <ArrowRight size={13} />
+                      </Link>
+                    }
+                  >
+                    Needs your attention
+                  </SectionLabel>
+                  <RowList>
+                    {needsAttention.slice(0, 5).map((app) => (
+                      <ApplicationRow key={app.id} app={app} />
+                    ))}
+                  </RowList>
+                </section>
+              )}
+              <section>
+                <SectionLabel
+                  action={
+                    <Link href="/opportunities" className="flex items-center gap-1 text-[13px] text-muted hover:text-fg">
+                      All opportunities <ArrowRight size={13} />
+                    </Link>
+                  }
+                >
+                  Recently discovered
+                </SectionLabel>
+                <RowList>
+                  {data.recent_applications.map((app) => (
                     <ApplicationRow key={app.id} app={app} />
                   ))}
-                </div>
-              )}
-            </section>
-
-            <section>
-              <SectionLabel>Skills to work on</SectionLabel>
-              <Card className="p-5">
-                {data.most_common_missing_skills.length === 0 ? (
-                  <p className="text-sm text-muted">No recurring gaps yet — nice.</p>
-                ) : (
-                  <ul className="space-y-3.5">
-                    {data.most_common_missing_skills.map((skill, i) => (
-                      <li key={skill}>
-                        <div className="mb-1.5 flex items-center justify-between text-sm">
-                          <span className="font-medium text-fg">{skill}</span>
-                          <span className="text-xs text-subtle">#{i + 1}</span>
-                        </div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
-                          <div
-                            className="h-full rounded-full bg-gradient-to-r from-rose-400 to-violet-500"
-                            style={{ width: `${100 - (i / maxGap) * 55}%` }}
-                          />
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <div className="mt-5 grid grid-cols-2 gap-3 border-t border-line pt-4 text-center">
-                  <div>
-                    <div className="text-xl font-semibold text-bad">{data.total_missing_skills}</div>
-                    <div className="text-xs text-subtle">missing, across roles</div>
-                  </div>
-                  <div>
-                    <div className="text-xl font-semibold text-warn">{data.total_weak_skills}</div>
-                    <div className="text-xs text-subtle">weak, across roles</div>
-                  </div>
-                </div>
-              </Card>
-            </section>
-          </div>
-
-          <section>
-            <SectionLabel
-              action={
-                <Link href="/opportunities" className="inline-flex items-center gap-1 text-xs font-semibold text-accent-fg hover:underline">
-                  View all <ArrowRight size={13} />
-                </Link>
-              }
-            >
-              Recently discovered
-            </SectionLabel>
-            <div className="stagger space-y-2.5">
-              {data.recent_applications.map((app) => (
-                <ApplicationRow key={app.id} app={app} />
-              ))}
+                </RowList>
+              </section>
             </div>
-          </section>
+
+            <div className="space-y-6">
+              <section>
+                <SectionLabel>Closing soon</SectionLabel>
+                <Card className="divide-y divide-line">
+                  {data.urgent_deadlines.length === 0 ? (
+                    <p className="p-4 text-[13px] text-muted">Nothing due in the next 14 days.</p>
+                  ) : (
+                    data.urgent_deadlines.map((app) => {
+                      const days = daysUntil(app.deadline!);
+                      return (
+                        <Link key={app.id} href={`/applications/${app.id}`} className="flex items-center gap-3 p-3.5 transition-colors hover:bg-surface-2">
+                          <CompanyAvatar name={app.company_name} size="sm" />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[13px] font-medium text-fg">{app.company_name}</div>
+                            <div className="truncate text-xs text-muted">{app.role}</div>
+                          </div>
+                          <Badge tone={deadlineTone(days)}>{deadlineLabel(days)}</Badge>
+                        </Link>
+                      );
+                    })
+                  )}
+                </Card>
+              </section>
+
+              <section>
+                <SectionLabel>Skills to work on</SectionLabel>
+                <Card className="p-4">
+                  {data.most_common_missing_skills.length === 0 ? (
+                    <p className="text-[13px] text-muted">No recurring gaps yet.</p>
+                  ) : (
+                    <ol className="space-y-2.5">
+                      {data.most_common_missing_skills.map((skill, i) => (
+                        <li key={skill} className="flex items-center gap-3 text-[13px]">
+                          <span className="w-4 font-mono text-[11px] text-subtle">{i + 1}</span>
+                          <span className="flex-1 font-medium text-fg">{skill}</span>
+                          <Progress value={100 - i * 18} tone="neutral" className="w-20" />
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                  <div className="mt-4 flex gap-6 border-t border-line pt-3 text-xs text-subtle">
+                    <span>
+                      <span className="font-semibold text-fg">{data.total_missing_skills}</span> missing
+                    </span>
+                    <span>
+                      <span className="font-semibold text-fg">{data.total_weak_skills}</span> weak
+                    </span>
+                    <span className="ml-auto">across all roles</span>
+                  </div>
+                </Card>
+              </section>
+            </div>
+          </div>
         </>
       )}
     </div>

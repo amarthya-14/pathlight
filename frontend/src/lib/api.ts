@@ -1,5 +1,7 @@
 import type {
   ApplicationOut,
+  PostApplyStage,
+  TaskStatus,
   DashboardHomeOut,
   DocumentDetailOut,
   DocumentOut,
@@ -147,6 +149,18 @@ export const api = {
     request<TailoredResumeOut>(`/api/applications/${applicationId}/tailor`, { method: "POST" }),
   downloadTailoredResumePdf: (applicationId: string) =>
     requestFile(`/api/applications/${applicationId}/tailored-resume.pdf`),
+  recheckApplication: (applicationId: string, jobDescription?: string) =>
+    request<ApplicationOut>(`/api/applications/${applicationId}/recheck`, {
+      method: "POST",
+      body: { job_description: jobDescription ?? null },
+    }),
+  updateApplicationStatus: (applicationId: string, stage: PostApplyStage, note?: string) =>
+    request<ApplicationOut>(`/api/applications/${applicationId}/status`, { method: "POST", body: { stage, note: note || null } }),
+  updateTaskStatus: (applicationId: string, taskId: string, status: TaskStatus) =>
+    request<PreparationPlanOut>(`/api/applications/${applicationId}/preparation-plan/tasks/${taskId}`, {
+      method: "PATCH",
+      body: { status },
+    }),
   markApplied: (applicationId: string) =>
     request<ApplicationOut>(`/api/applications/${applicationId}/mark-applied`, { method: "POST" }),
   reviewApplication: (applicationId: string, approve: boolean) =>

@@ -1,16 +1,15 @@
 export function ConfidenceBar({ confidence }: { confidence: number }) {
   const pct = Math.round(Math.max(0, Math.min(1, confidence)) * 100);
-  const color = pct >= 75 ? "from-emerald-400 to-teal-400" : pct >= 40 ? "from-amber-400 to-orange-400" : "from-rose-400 to-pink-500";
+  const color = pct >= 75 ? "bg-ok" : pct >= 40 ? "bg-warn" : "bg-bad";
 
   return (
-    <div className="flex items-center gap-2.5" title={`Confidence: ${pct}%`}>
-      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-surface-2">
-        <div
-          className={`h-full rounded-full bg-gradient-to-r ${color} transition-[width] duration-700 ease-out`}
-          style={{ width: `${pct}%` }}
-        />
+    <div className="flex items-center gap-2" title={`Confidence: ${pct}%`}>
+      <div className="flex gap-[3px]" aria-hidden>
+        {[0, 1, 2, 3, 4].map((i) => (
+          <span key={i} className={`h-2.5 w-1 rounded-full ${pct > i * 20 ? color : "bg-line-strong"}`} />
+        ))}
       </div>
-      <span className="text-xs font-medium tabular-nums text-muted">{pct}% confidence</span>
+      <span className="text-xs tabular-nums text-subtle">{pct}% confidence</span>
     </div>
   );
 }

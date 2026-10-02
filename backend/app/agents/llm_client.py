@@ -29,12 +29,30 @@ def get_small_llm() -> ChatGoogleGenerativeAI:
     )
 
 
+class _StrongWithFallback:
+    """The strong model, falling back to the small model when the strong one fails
+    (most commonly a 429: the free tier allows only ~20 strong-model requests per day
+    per project — measured, see docs/DEPLOYMENT.md). Each model has its own quota, so
+    the fallback keeps tailoring/eligibility working instead of erroring for the rest of
+    the day. Exposes the one method agents use: with_structured_output(schema)."""
+
+    def __init__(self, strong: ChatGoogleGenerativeAI, small: ChatGoogleGenerativeAI):
+        self._strong = strong
+        self._small = small
+
+    def with_structured_output(self, schema):
+        return self._strong.with_structured_output(schema).with_fallbacks(
+            [self._small.with_structured_output(schema)]
+        )
+
+
 @lru_cache
-def get_strong_llm() -> ChatGoogleGenerativeAI:
-    """Stronger model for ambiguous reasoning (Eligibility Agent, only when deterministic
-    rules alone can't decide — see app/agents/eligibility.py)."""
-    return ChatGoogleGenerativeAI(
+def get_strong_llm() -> _StrongWithFallback:
+    """Stronger model for generation and ambiguous reasoning (Resume Tailor, Eligibility
+    when deterministic rules can't decide), with automatic fallback to the small model."""
+    strong = ChatGoogleGenerativeAI(
         model=settings.LLM_MODEL_STRONG,
         google_api_key=settings.GOOGLE_API_KEY,
         temperature=0,
     )
+    return _StrongWithFallback(strong, get_small_llm())

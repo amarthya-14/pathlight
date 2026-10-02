@@ -15,13 +15,17 @@ export type ProfileOut = {
   cgpa: number | null;
   branch: string | null;
   github_username: string | null;
+  experience_years: number | null;
 };
 
 export type ProfileUpsert = {
   cgpa: number | null;
   branch: string | null;
   github_username: string | null;
+  experience_years?: number | null;
 };
+
+export type PostApplyStage = "OA" | "INTERVIEW" | "OFFER" | "REJECTED";
 
 export type EligibilityDecision = "eligible" | "partially_eligible" | "not_eligible" | "uncertain";
 

@@ -3,58 +3,63 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, BookOpenCheck, CalendarClock, CheckCircle2, Clock, GitBranch, Hourglass, RotateCw } from "lucide-react";
+import { BookOpenCheck, Check, ChevronRight, Clock } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth-context";
 import { api, ApiError } from "@/lib/api";
-import type { PreparationPlanOut, PreparationTaskOut } from "@/lib/types";
-import { Alert, Button, Card, EmptyState, PageHeader, PageSkeleton, SectionLabel, StatCard } from "@/components/ui";
+import type { PreparationPlanOut, PreparationTaskOut, TaskStatus } from "@/lib/types";
+import { useToast } from "@/components/Toast";
+import { Alert, Button, Card, EmptyState, PageHeader, PageSkeleton, Progress, SectionLabel } from "@/components/ui";
 
-function TaskStep({ task, allTasks, last }: { task: PreparationTaskOut; allTasks: PreparationTaskOut[]; last: boolean }) {
-  const depNames = task.depends_on
-    .map((id) => allTasks.find((t) => t.id === id)?.skill)
-    .filter((s): s is string => Boolean(s));
+function TaskRow({
+  task,
+  allTasks,
+  onToggle,
+  busy,
+}: {
+  task: PreparationTaskOut;
+  allTasks: PreparationTaskOut[];
+  onToggle: () => void;
+  busy: boolean;
+}) {
+  const depNames = task.depends_on.map((id) => allTasks.find((t) => t.id === id)?.skill).filter((s): s is string => Boolean(s));
   const done = task.status === "done";
+  const blockedBy = task.depends_on
+    .map((id) => allTasks.find((t) => t.id === id))
+    .filter((t): t is PreparationTaskOut => Boolean(t) && t!.status !== "done");
 
   return (
-    <li className="relative flex gap-4 pb-4 last:pb-0">
-      {!last && <span className="absolute left-[19px] top-11 h-[calc(100%-2.25rem)] w-px bg-gradient-to-b from-accent/50 to-line" />}
-      <span
-        className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold ${
-          done ? "bg-ok text-white" : "border border-line bg-surface-solid text-accent-fg"
+    <li className="flex items-start gap-3.5 px-4 py-3.5">
+      <button
+        onClick={onToggle}
+        disabled={busy}
+        aria-label={done ? `Mark ${task.title} as not done` : `Mark ${task.title} as done`}
+        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
+          done ? "border-ok bg-ok text-white" : "border-line-strong bg-surface hover:border-fg"
         }`}
       >
-        {done ? <CheckCircle2 size={18} /> : task.order_index + 1}
-      </span>
-      <Card interactive className="min-w-0 flex-1 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="font-semibold text-fg">{task.title}</div>
-            <div className="mt-1 text-sm leading-relaxed text-muted">{task.description}</div>
-          </div>
-          <div className="shrink-0 rounded-lg bg-surface-2 px-2.5 py-1 text-right">
-            <div className="flex items-center gap-1 text-sm font-semibold tabular-nums text-fg">
-              <Clock size={12} className="text-subtle" />
-              {task.estimated_hours}h
-            </div>
-          </div>
-        </div>
+        {done && <Check size={13} strokeWidth={3} />}
+      </button>
+      <div className="min-w-0 flex-1">
+        <div className={`text-[13.5px] font-medium ${done ? "text-subtle line-through decoration-line-strong" : "text-fg"}`}>{task.title}</div>
+        <div className="mt-0.5 text-[13px] leading-relaxed text-muted">{task.description}</div>
         {depNames.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-subtle">
-            <GitBranch size={12} /> After:
-            {depNames.map((d) => (
-              <span key={d} className="rounded-full bg-accent-soft px-2 py-0.5 font-medium text-accent-fg">
-                {d}
-              </span>
-            ))}
+          <div className="mt-1.5 text-xs text-subtle">
+            After {depNames.join(", ")}
+            {!done && blockedBy.length > 0 && <span className="text-warn"> · start with {blockedBy.map((t) => t.skill).join(", ")} first</span>}
           </div>
         )}
-      </Card>
+      </div>
+      <div className="flex shrink-0 items-center gap-1 text-[13px] tabular-nums text-muted">
+        <Clock size={12} className="text-subtle" />
+        {task.estimated_hours}h
+      </div>
     </li>
   );
 }
 
 export default function PreparationPlanPage() {
   const { user, loading: authLoading } = useRequireAuth();
+  const toast = useToast();
   const params = useParams<{ id: string }>();
   const [plan, setPlan] = useState<PreparationPlanOut | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -62,6 +67,7 @@ export default function PreparationPlanPage() {
   const [error, setError] = useState<string | null>(null);
   const [hoursPerDay, setHoursPerDay] = useState(2);
   const [regenerating, setRegenerating] = useState(false);
+  const [busyTask, setBusyTask] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -85,6 +91,7 @@ export default function PreparationPlanPage() {
     try {
       setPlan(await api.regeneratePreparationPlan(params.id, hoursPerDay));
       setNotFound(false);
+      toast("Plan recalculated", { description: `Based on ${hoursPerDay}h of study a day.` });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Failed to regenerate plan");
     } finally {
@@ -92,59 +99,50 @@ export default function PreparationPlanPage() {
     }
   };
 
+  const toggleTask = async (task: PreparationTaskOut) => {
+    const next: TaskStatus = task.status === "done" ? "not_started" : "done";
+    setBusyTask(task.id);
+    // Optimistic: tick immediately, roll back if the save fails.
+    setPlan((p) => (p ? { ...p, tasks: p.tasks.map((t) => (t.id === task.id ? { ...t, status: next } : t)) } : p));
+    try {
+      setPlan(await api.updateTaskStatus(params.id, task.id, next));
+    } catch {
+      setPlan((p) => (p ? { ...p, tasks: p.tasks.map((t) => (t.id === task.id ? { ...t, status: task.status } : t)) } : p));
+      toast("Couldn't save that", { tone: "bad" });
+    } finally {
+      setBusyTask(null);
+    }
+  };
+
   if (authLoading || !user) return null;
   if (!loaded) return <PageSkeleton />;
 
   const tasks = plan ? [...plan.tasks].sort((a, b) => a.order_index - b.order_index) : [];
-  const usage =
-    plan && plan.available_hours ? Math.round((plan.total_estimated_hours / Math.max(plan.available_hours, 0.1)) * 100) : null;
+  const doneHours = tasks.filter((t) => t.status === "done").reduce((s, t) => s + t.estimated_hours, 0);
+  const totalHours = plan?.total_estimated_hours ?? 0;
+  const progress = totalHours ? Math.round((doneHours / totalHours) * 100) : 0;
+  const load = plan && plan.available_hours ? Math.round((plan.total_estimated_hours / Math.max(plan.available_hours, 0.1)) * 100) : null;
 
   return (
-    <div className="space-y-8">
-      <Link href={`/applications/${params.id}`} className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-fg">
-        <ArrowLeft size={15} /> Back to application
-      </Link>
+    <div className="space-y-6">
+      <nav className="flex items-center gap-1.5 text-[13px] text-subtle">
+        <Link href="/applications" className="hover:text-fg">
+          Applications
+        </Link>
+        <ChevronRight size={13} />
+        <Link href={`/applications/${params.id}`} className="hover:text-fg">
+          Application
+        </Link>
+        <ChevronRight size={13} />
+        <span className="text-muted">Prep plan</span>
+      </nav>
 
       <div className="animate-fade-in">
         <PageHeader
-          eyebrow="Prepare"
           title="Preparation plan"
-          subtitle="Your skill gaps turned into an ordered plan — prerequisites first, with time estimates checked against the deadline."
+          subtitle="Your skill gaps as an ordered checklist — prerequisites first, with time estimates checked against the deadline."
         />
       </div>
-
-      <Card className="p-5 sm:p-6">
-        <form onSubmit={onRegenerate} className="flex flex-col gap-5 sm:flex-row sm:items-end">
-          <div className="flex-1">
-            <div className="mb-3 flex items-center justify-between">
-              <label htmlFor="hours" className="text-sm font-medium text-fg">
-                Hours you can study per day
-              </label>
-              <span className="rounded-lg bg-accent-soft px-2.5 py-1 text-sm font-semibold tabular-nums text-accent-fg">
-                {hoursPerDay}h / day
-              </span>
-            </div>
-            <input
-              id="hours"
-              type="range"
-              min={0.5}
-              max={10}
-              step={0.5}
-              value={hoursPerDay}
-              onChange={(e) => setHoursPerDay(Number(e.target.value))}
-              className="w-full accent-violet-500"
-            />
-            <div className="mt-1 flex justify-between text-[10px] text-subtle">
-              <span>30 min</span>
-              <span>10 h</span>
-            </div>
-          </div>
-          <Button type="submit" size="lg" loading={regenerating}>
-            {!regenerating && <RotateCw size={15} />}
-            {regenerating ? "Planning…" : plan ? "Recalculate plan" : "Generate plan"}
-          </Button>
-        </form>
-      </Card>
 
       {error && <Alert tone="bad">{error}</Alert>}
 
@@ -152,56 +150,97 @@ export default function PreparationPlanPage() {
         <EmptyState
           icon={BookOpenCheck}
           title="No plan yet"
-          description="Either there are no missing or weak skills to prepare for (good news!), or a plan hasn't been generated with your real study time. Set your hours above and generate one."
+          description="Either there's nothing missing to prepare for (good news), or a plan hasn't been generated with your real study time. Set your hours below and generate one."
         />
       )}
 
-      {plan && (
-        <>
-          <div className="stagger grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
-            <StatCard icon={Hourglass} value={`${plan.total_estimated_hours}h`} label="Total study time" />
-            <StatCard
-              icon={CalendarClock}
-              value={plan.available_hours !== null ? `${plan.available_hours}h` : "—"}
-              label="Available before deadline"
-            />
-            <div className="col-span-2 lg:col-span-1">
-              <StatCard
-                icon={CheckCircle2}
-                value={plan.feasible === null ? "Unknown" : plan.feasible ? "On track" : "Tight"}
-                label={plan.feasible === null ? "No deadline to compare against" : plan.feasible ? "You can finish in time" : "More hours than you have"}
-                tone={plan.feasible === null ? "neutral" : plan.feasible ? "success" : "danger"}
-              />
-            </div>
-          </div>
+      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+        <div className="min-w-0 space-y-6">
+          {plan && (
+            <section>
+              <SectionLabel action={<span className="text-xs tabular-nums text-subtle">{tasks.filter((t) => t.status === "done").length} / {tasks.length} done</span>}>
+                Steps, in order
+              </SectionLabel>
+              <Card className="overflow-hidden">
+                <div className="border-b border-line px-4 py-3">
+                  <div className="flex items-center justify-between text-[13px]">
+                    <span className="text-muted">
+                      <span className="font-semibold text-fg">{doneHours}h</span> of {totalHours}h complete
+                    </span>
+                    <span className="tabular-nums text-subtle">{progress}%</span>
+                  </div>
+                  <Progress value={progress} tone="ok" className="mt-2" />
+                </div>
+                <ol className="divide-y divide-line">
+                  {tasks.map((task) => (
+                    <TaskRow key={task.id} task={task} allTasks={plan.tasks} onToggle={() => toggleTask(task)} busy={busyTask === task.id} />
+                  ))}
+                </ol>
+              </Card>
+            </section>
+          )}
+        </div>
 
-          {usage !== null && (
-            <Card className="p-5">
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="font-medium text-fg">Study load vs. time available</span>
-                <span className={`font-semibold tabular-nums ${plan.feasible ? "text-ok" : "text-bad"}`}>{usage}%</span>
+        <aside className="space-y-4">
+          <Card className="p-4">
+            <form onSubmit={onRegenerate}>
+              <div className="flex items-center justify-between">
+                <label htmlFor="hours" className="text-[13px] font-medium text-fg">
+                  Study time per day
+                </label>
+                <span className="text-[13px] font-semibold tabular-nums text-fg">{hoursPerDay}h</span>
               </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-surface-2">
-                <div
-                  className={`h-full rounded-full transition-all duration-700 ${
-                    plan.feasible ? "bg-gradient-to-r from-emerald-400 to-cyan-400" : "bg-gradient-to-r from-amber-400 to-rose-500"
-                  }`}
-                  style={{ width: `${Math.min(usage, 100)}%` }}
-                />
+              <input
+                id="hours"
+                type="range"
+                min={0.5}
+                max={10}
+                step={0.5}
+                value={hoursPerDay}
+                onChange={(e) => setHoursPerDay(Number(e.target.value))}
+                className="mt-4 w-full"
+              />
+              <div className="mt-1.5 flex justify-between text-[11px] text-subtle">
+                <span>30 min</span>
+                <span>10 h</span>
               </div>
+              <Button type="submit" loading={regenerating} className="mt-4 w-full">
+                {regenerating ? "Planning…" : plan ? "Recalculate plan" : "Generate plan"}
+              </Button>
+              {plan && <p className="mt-2 text-[11px] leading-relaxed text-subtle">Recalculating creates a fresh plan and resets ticked tasks.</p>}
+            </form>
+          </Card>
+
+          {plan && (
+            <Card className="p-4">
+              <div className="text-[13px] font-medium text-fg">Will you make the deadline?</div>
+              <div
+                className={`mt-2 text-xl font-semibold tracking-tight ${
+                  plan.feasible === null ? "text-fg" : plan.feasible ? "text-ok" : "text-bad"
+                }`}
+              >
+                {plan.feasible === null ? "No deadline set" : plan.feasible ? "Yes, on track" : "It's tight"}
+              </div>
+              <dl className="mt-3 space-y-2 text-[13px]">
+                <div className="flex justify-between">
+                  <dt className="text-subtle">Study needed</dt>
+                  <dd className="tabular-nums text-fg">{plan.total_estimated_hours}h</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-subtle">Time available</dt>
+                  <dd className="tabular-nums text-fg">{plan.available_hours !== null ? `${plan.available_hours}h` : "—"}</dd>
+                </div>
+              </dl>
+              {load !== null && (
+                <>
+                  <Progress value={load} tone={plan.feasible ? "ok" : "bad"} className="mt-3" />
+                  <div className="mt-1.5 text-[11px] text-subtle">{load}% of your available time</div>
+                </>
+              )}
             </Card>
           )}
-
-          <section>
-            <SectionLabel>{tasks.length} steps, in order</SectionLabel>
-            <ol className="stagger">
-              {tasks.map((task, i) => (
-                <TaskStep key={task.id} task={task} allTasks={plan.tasks} last={i === tasks.length - 1} />
-              ))}
-            </ol>
-          </section>
-        </>
-      )}
+        </aside>
+      </div>
     </div>
   );
 }

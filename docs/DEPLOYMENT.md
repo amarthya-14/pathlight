@@ -29,6 +29,14 @@ Kubernetes stays out of scope (the "how this scales" viva answer).
   and their connection expires every 7 days (they click Reconnect). Publishing beyond that
   requires Google verification plus a paid third-party security assessment — not free.
   Everything except Gmail sourcing/sending works for anyone.
+- **Gemini free tier is tiny for the strong model — measured, not assumed.** On
+  2026-10-03 `gemini-3.6-flash` returned `429 RESOURCE_EXHAUSTED` with
+  `GenerateRequestsPerDayPerProjectPerModel-FreeTier, limit: 20` — i.e. **20 strong-model
+  requests per day for the whole deployment**. Resume tailoring and LLM-path eligibility
+  use the strong model. Mitigation in code: `get_strong_llm()` falls back to the small
+  model (separate quota) on any failure, verified live against that real 429. For a
+  campus launch, a billing-enabled key (pay-as-you-go flash pricing is cents per day at
+  this scale) is the real fix.
 - **One shared Gemini key.** Free-tier rate limits are shared by all users; Google may use
   free-tier API data to improve its products — tell users before they upload resumes, or
   move to a paid key before a wider launch.

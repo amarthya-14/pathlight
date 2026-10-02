@@ -43,13 +43,13 @@ export default function LoginPage() {
       footer={
         <>
           New to Pathlight?{" "}
-          <Link href="/register" className="font-semibold text-accent-fg hover:underline">
+          <Link href="/register" className="font-medium text-fg underline decoration-line-strong underline-offset-4 hover:decoration-fg">
             Create an account
           </Link>
         </>
       }
     >
-      <form onSubmit={onSubmit} className="space-y-5">
+      <form onSubmit={onSubmit} className="space-y-4">
         <Field label="Email">
           <TextInput
             type="email"

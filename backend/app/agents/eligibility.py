@@ -26,7 +26,13 @@ information, not a basis to assume the student has it.
 - If you cannot confidently decide from the given facts, choose 'uncertain' and list what \
 information is missing — do not guess to avoid saying 'uncertain'.
 - 'confidence' should reflect how directly the given facts support your decision, not how \
-confident you feel about the wording."""
+confident you feel about the wording.
+- 'eligible' needs positive evidence. If the statement contains no actual eligibility \
+criterion (e.g. it's an application instruction like "apply with resume", a perk, or a \
+location), answer 'uncertain' and say the posting doesn't state its eligibility criteria \
+— absence of a requirement is not proof the student meets the role's real bar.
+- If the job title implies an experienced hire (Senior, Lead, II/III, SDE-2...) and the \
+student's work experience is 0 or not stated, do not answer 'eligible'."""
 
 
 # Titles that almost always mean an experienced hire. Used ONLY to stop a posting with no

@@ -1,7 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, ClipboardCopy, Download, ExternalLink, FileText, Mail, Send, ShieldCheck, SkipForward, Sparkles, TriangleAlert } from "lucide-react";
+import {
+  Check,
+  ClipboardCopy,
+  Download,
+  ExternalLink,
+  FileText,
+  Mail,
+  Send,
+  ShieldCheck,
+  SkipForward,
+  TriangleAlert,
+} from "lucide-react";
 import { api, ApiError, saveBlob } from "@/lib/api";
 import { diffLines } from "@/lib/diff";
 import type { ApplicationOut, ReviewResponse, TailoredResumeOut } from "@/lib/types";
@@ -41,6 +52,7 @@ export function ReviewApplyCard({
   tailored: TailoredResumeOut;
   onReviewed: (response: ReviewResponse) => void;
 }) {
+  const [tab, setTab] = useState<"resume" | "cover">("resume");
   const [onlyChanges, setOnlyChanges] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [submitting, setSubmitting] = useState<"approve" | "skip" | null>(null);
@@ -96,157 +108,149 @@ export function ReviewApplyCard({
   };
 
   return (
-    <Card glow className="overflow-hidden">
-      {/* Header */}
-      <div className="flex flex-col gap-4 border-b border-line p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
-        <div className="flex items-start gap-3.5">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-white shadow-glow">
-            <Sparkles size={20} />
-          </span>
-          <div>
-            <div className="font-semibold text-fg">Tailored resume ready for your review</div>
-            <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted">
-              Nothing is sent until you approve.{" "}
-              {application.apply_email ? (
-                <>
-                  Approving emails it to <span className="font-medium text-fg">{application.apply_email}</span> from your
-                  connected Gmail.
-                </>
-              ) : application.application_url ? (
-                <>
-                  One click opens the job on {site}, downloads this resume as a PDF and copies the cover note — you just
-                  upload, paste and press Submit there.
-                </>
-              ) : (
-                "This posting has no application email or link, so you'll apply through the original source."
-              )}
-            </p>
-          </div>
+    <Card className="overflow-hidden">
+      <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-[15px] font-semibold text-fg">Tailored resume ready for your review</div>
+          <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-muted">
+            Nothing is sent until you approve.{" "}
+            {application.apply_email ? (
+              <>
+                Approving emails it to <span className="font-medium text-fg">{application.apply_email}</span> from your
+                connected Gmail.
+              </>
+            ) : application.application_url ? (
+              <>
+                One click opens the job on {site}, downloads this resume as a PDF and copies the cover note — you just
+                upload, paste and press Submit there.
+              </>
+            ) : (
+              "This posting has no application email or link, so you'll apply through the original source."
+            )}
+          </p>
         </div>
         <div className="shrink-0">
           <ConfidenceBar confidence={tailored.confidence} />
         </div>
       </div>
 
-      <div className="space-y-5 p-5 sm:p-6">
-        <div className="flex items-center gap-2 rounded-xl bg-ok-soft px-3.5 py-2.5 text-xs font-medium text-ok">
-          <ShieldCheck size={15} className="shrink-0" /> Checked: this resume claims no skill that isn&apos;t on your
+      <div className="space-y-3 px-5">
+        <div className="flex items-center gap-2 text-[13px] text-ok">
+          <ShieldCheck size={14} className="shrink-0" /> Checked: this resume claims no skill that isn&apos;t on your
           original.
         </div>
-
         {tailored.warnings.length > 0 && (
-          <ul className="space-y-2 rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">
+          <ul className="space-y-1.5 rounded-lg bg-warn-soft px-3.5 py-2.5 text-[13px] text-warn">
             {tailored.warnings.map((w) => (
-              <li key={w} className="flex gap-2.5">
-                <TriangleAlert size={15} className="mt-0.5 shrink-0" /> {w}
+              <li key={w} className="flex gap-2">
+                <TriangleAlert size={14} className="mt-[2px] shrink-0" /> {w}
               </li>
             ))}
           </ul>
         )}
-
         {tailored.changes_summary.length > 0 && (
-          <div>
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-subtle">What changed</div>
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {tailored.changes_summary.map((c) => (
-                <li key={c} className="flex gap-2.5 rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-fg/90">
-                  <Check size={15} className="mt-0.5 shrink-0 text-accent-fg" strokeWidth={2.6} />
-                  {c}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
-          <div className="min-w-0">
-            <div className="mb-2 flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-subtle">
-                <FileText size={13} /> Resume {lines ? `· ${changedCount} line${changedCount === 1 ? "" : "s"} changed` : ""}
-              </div>
-              {lines && (
-                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
-                  <input
-                    type="checkbox"
-                    className="h-3.5 w-3.5 accent-violet-500"
-                    checked={onlyChanges}
-                    onChange={(e) => setOnlyChanges(e.target.checked)}
-                  />
-                  Only changes
-                </label>
-              )}
-            </div>
-            <div
-              data-testid="resume-diff"
-              className="max-h-[420px] overflow-auto rounded-xl border border-line bg-bg-elevated py-2 font-mono text-[12px] leading-relaxed"
-            >
-              {visibleLines ? (
-                visibleLines.map((line, i) => (
-                  <div
-                    key={i}
-                    data-diff={line.type}
-                    className={`whitespace-pre-wrap px-3.5 ${
-                      line.type === "added"
-                        ? "bg-ok-soft text-ok"
-                        : line.type === "removed"
-                          ? "bg-bad-soft text-bad line-through decoration-bad/40"
-                          : "text-muted"
-                    }`}
-                  >
-                    <span className="mr-2 inline-block w-3 select-none opacity-60">
-                      {line.type === "added" ? "+" : line.type === "removed" ? "−" : ""}
-                    </span>
-                    {line.text || " "}
-                  </div>
-                ))
-              ) : (
-                <div className="whitespace-pre-wrap px-3.5 text-fg">{tailored.tailored_text}</div>
-              )}
-            </div>
-          </div>
-
-          <div className="min-w-0">
-            <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-subtle">
-              <Mail size={13} /> Cover note
-            </div>
-            <div className="max-h-[420px] overflow-auto whitespace-pre-wrap rounded-xl border border-line bg-bg-elevated p-4 text-sm leading-relaxed text-fg/90">
-              {tailored.cover_note}
-            </div>
-          </div>
-        </div>
-
-        {error && (
-          <div className="flex items-start gap-2.5 rounded-xl bg-bad-soft px-4 py-3 text-sm font-medium text-bad">
-            <TriangleAlert size={16} className="mt-0.5 shrink-0" />
-            {error}
-          </div>
+          <ul className="space-y-1.5 pt-1">
+            {tailored.changes_summary.map((c) => (
+              <li key={c} className="flex gap-2 text-[13px] text-muted">
+                <Check size={14} className="mt-[2px] shrink-0 text-subtle" strokeWidth={2.4} />
+                {c}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 
-      {/* Actions */}
-      <div className="border-t border-line bg-surface-2 p-4 sm:px-6">
+      <div className="mt-5 border-t border-line">
+        <div className="flex items-center justify-between gap-3 border-b border-line px-5">
+          <div className="flex gap-5" role="tablist">
+            {(
+              [
+                ["resume", FileText, `Resume${lines ? ` · ${changedCount} change${changedCount === 1 ? "" : "s"}` : ""}`],
+                ["cover", Mail, "Cover note"],
+              ] as const
+            ).map(([key, Icon, label]) => (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={tab === key}
+                onClick={() => setTab(key)}
+                className={`-mb-px flex items-center gap-1.5 border-b-2 py-2.5 text-[13px] font-medium transition-colors ${
+                  tab === key ? "border-fg text-fg" : "border-transparent text-subtle hover:text-muted"
+                }`}
+              >
+                <Icon size={13} /> {label}
+              </button>
+            ))}
+          </div>
+          {tab === "resume" && lines && (
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted">
+              <input type="checkbox" className="h-3.5 w-3.5 accent-[var(--ink)]" checked={onlyChanges} onChange={(e) => setOnlyChanges(e.target.checked)} />
+              Only changes
+            </label>
+          )}
+        </div>
+
+        <div
+          data-testid="resume-diff"
+          className={`max-h-[440px] overflow-auto bg-surface-2 py-3 font-mono text-[12px] leading-[1.7] ${tab === "resume" ? "" : "hidden"}`}
+        >
+          {visibleLines ? (
+            visibleLines.map((line, i) => (
+              <div
+                key={i}
+                data-diff={line.type}
+                className={`whitespace-pre-wrap px-5 ${
+                  line.type === "added"
+                    ? "bg-ok-soft text-ok"
+                    : line.type === "removed"
+                      ? "bg-bad-soft text-bad line-through decoration-bad/40"
+                      : "text-muted"
+                }`}
+              >
+                <span className="mr-3 inline-block w-2 select-none opacity-50">
+                  {line.type === "added" ? "+" : line.type === "removed" ? "−" : ""}
+                </span>
+                {line.text || " "}
+              </div>
+            ))
+          ) : (
+            <div className="whitespace-pre-wrap px-5 text-fg">{tailored.tailored_text}</div>
+          )}
+        </div>
+        <div className={`max-h-[440px] overflow-auto whitespace-pre-wrap bg-surface-2 px-5 py-4 text-sm leading-relaxed text-fg ${tab === "cover" ? "" : "sr-only"}`}>
+          {tailored.cover_note}
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-2 border-t border-line bg-bad-soft px-5 py-3 text-[13px] font-medium text-bad">
+          <TriangleAlert size={15} className="mt-[1px] shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <div className="border-t border-line px-5 py-3.5">
         {confirming ? (
           <div className="animate-scale-in flex flex-col gap-3 sm:flex-row sm:items-center">
-            <span className="text-sm text-fg">
-              Send this application to <strong className="text-accent-fg">{application.apply_email}</strong> now? This
-              can&apos;t be undone.
+            <span className="text-[13px] text-fg">
+              Send this application to <strong>{application.apply_email}</strong> now? This can&apos;t be undone.
             </span>
             <div className="flex gap-2 sm:ml-auto">
               <Button variant="secondary" onClick={() => setConfirming(false)} disabled={submitting !== null}>
                 Cancel
               </Button>
               <Button onClick={() => submit(true)} disabled={submitting !== null} loading={submitting === "approve"}>
-                {submitting !== "approve" && <Send size={15} />} {submitting === "approve" ? "Sending…" : "Yes, send it"}
+                {submitting !== "approve" && <Send size={14} />} {submitting === "approve" ? "Sending…" : "Yes, send it"}
               </Button>
             </div>
           </div>
         ) : (
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
             <Button variant="ghost" onClick={() => submit(false)} disabled={submitting !== null}>
-              <SkipForward size={15} /> {submitting === "skip" ? "Skipping…" : "Skip"}
+              <SkipForward size={14} /> {submitting === "skip" ? "Skipping…" : "Skip"}
             </Button>
-            <Button size="lg" onClick={onApproveClick} disabled={submitting !== null}>
-              {application.apply_email ? <Send size={16} /> : <ExternalLink size={16} />}
+            <Button onClick={onApproveClick} disabled={submitting !== null}>
+              {application.apply_email ? <Send size={14} /> : <ExternalLink size={14} />}
               {application.apply_email
                 ? "Approve & send"
                 : submitting === "approve"
@@ -302,51 +306,42 @@ export function FinishApplyPanel({
 
   const steps = [
     `Open the job on ${site} and click Apply.`,
-    "Upload your tailored resume PDF (check your Downloads).",
-    "Paste the cover note into any message or cover-letter field.",
+    "Upload your tailored resume PDF from Downloads.",
+    "Paste the cover note into any message field.",
     `Submit on ${site}, then confirm below.`,
   ];
 
   return (
-    <Card glow className="overflow-hidden">
-      <div className="p-5 sm:p-6">
-        <div className="flex items-start gap-3.5">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-warn-soft text-warn">
-            <ExternalLink size={20} />
-          </span>
-          <div>
-            <div className="font-semibold text-fg">Finish applying on {site}</div>
-            <p className="mt-1 text-sm text-muted">Everything&apos;s ready — four quick steps and you&apos;re done.</p>
-          </div>
-        </div>
-        <ol className="mt-5 grid gap-2.5 sm:grid-cols-2">
+    <Card className="overflow-hidden">
+      <div className="p-5">
+        <div className="text-[15px] font-semibold text-fg">Finish applying on {site}</div>
+        <p className="mt-1 text-[13px] text-muted">Everything&apos;s ready — four quick steps.</p>
+        <ol className="mt-4 grid gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-2">
           {steps.map((step, i) => (
-            <li key={step} className="flex items-start gap-3 rounded-xl border border-line bg-surface-2 p-3.5 text-sm text-fg/90">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent-fg">
-                {i + 1}
-              </span>
+            <li key={step} className="flex items-start gap-3 bg-surface p-3.5 text-[13px] text-fg">
+              <span className="font-mono text-[11px] leading-5 text-subtle">0{i + 1}</span>
               {step}
             </li>
           ))}
         </ol>
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap gap-2">
           {application.application_url && (
             <a href={application.application_url} target="_blank" rel="noopener noreferrer" className={buttonClasses("secondary", "md")}>
-              <ExternalLink size={15} /> Open job on {site}
+              <ExternalLink size={14} /> Open job on {site}
             </a>
           )}
           <Button variant="secondary" onClick={onDownload} disabled={!tailored}>
-            <Download size={15} /> Resume PDF
+            <Download size={14} /> Resume PDF
           </Button>
           <Button variant="secondary" onClick={onCopy} disabled={!tailored}>
-            {copied ? <Check size={15} className="text-ok" /> : <ClipboardCopy size={15} />} {copied ? "Copied" : "Copy cover note"}
+            {copied ? <Check size={14} className="text-ok" /> : <ClipboardCopy size={14} />} {copied ? "Copied" : "Copy cover note"}
           </Button>
         </div>
-        {error && <p className="mt-4 text-sm font-medium text-bad">{error}</p>}
+        {error && <p className="mt-3 text-[13px] font-medium text-bad">{error}</p>}
       </div>
-      <div className="flex justify-end border-t border-line bg-surface-2 p-4 sm:px-6">
-        <Button size="lg" onClick={onMark} loading={busy}>
-          {!busy && <Check size={16} strokeWidth={2.6} />} {busy ? "Saving…" : `I've submitted it on ${site}`}
+      <div className="flex justify-end border-t border-line px-5 py-3.5">
+        <Button onClick={onMark} loading={busy}>
+          {!busy && <Check size={14} strokeWidth={2.6} />} {busy ? "Saving…" : `I've submitted it on ${site}`}
         </Button>
       </div>
     </Card>
