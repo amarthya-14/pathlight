@@ -22,12 +22,14 @@ async def upsert_profile(payload: ProfileUpsert, current_user: User = Depends(ge
             cgpa=payload.cgpa,
             branch=payload.branch,
             github_username=payload.github_username,
+            experience_years=payload.experience_years,
         )
         await profile.insert()
     else:
         profile.cgpa = payload.cgpa
         profile.branch = payload.branch
         profile.github_username = payload.github_username
+        profile.experience_years = payload.experience_years
         await profile.save()
     return profile
 
@@ -38,5 +40,5 @@ async def get_profile(current_user: User = Depends(get_current_user)):
     if profile is None:
         # Return id=None rather than a fake ID — "no profile yet" is a normal, expected
         # state (see the eligibility pipeline's UNCERTAIN handling), not an error.
-        return ProfileOut(id=None, user_id=current_user.id, cgpa=None, branch=None, github_username=None)
+        return ProfileOut(id=None, user_id=current_user.id, cgpa=None, branch=None, github_username=None, experience_years=None)
     return profile

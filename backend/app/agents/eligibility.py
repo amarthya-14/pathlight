@@ -4,6 +4,7 @@ statement needs interpretation the structured fields can't capture. This orderin
 non-negotiable rule from docs/AI_DESIGN.md: never let the LLM decide something a plain
 comparison can decide reliably and cheaply.
 """
+import re
 import time
 
 from beanie import PydanticObjectId
@@ -28,7 +29,27 @@ information is missing — do not guess to avoid saying 'uncertain'.
 confident you feel about the wording."""
 
 
-def _deterministic_check(requirements: OpportunityRequirements, profile: Profile) -> EligibilityResult | None:
+# Titles that almost always mean an experienced hire. Used ONLY to stop a posting with no
+# stated criteria (e.g. a LinkedIn alert digest — title/company/location only) from being
+# called "Eligible"; it never makes anything NOT_ELIGIBLE on its own.
+_SENIOR_TITLE = re.compile(
+    r"(?i)\b(senior|sr\.?|lead|staff|principal|manager|architect|head of|director|vp)\b"
+    r"|\b(II|III|IV)\b"
+    r"|(?i:\b(sde|engineer|developer)[\s-]*[2-4]\b)"
+)
+
+
+def looks_senior(role: str | None) -> bool:
+    return bool(role and _SENIOR_TITLE.search(role))
+
+
+def _fmt_years(value: float) -> str:
+    return f"{value:g} year{'' if value == 1 else 's'}"
+
+
+def _deterministic_check(
+    requirements: OpportunityRequirements, profile: Profile, role: str | None = None
+) -> EligibilityResult | None:
     """
     Returns a definitive EligibilityResult if deterministic rules alone can decide, or
     None if qualitative text (raw_eligibility_text) still needs an LLM's judgment after
@@ -58,10 +79,24 @@ def _deterministic_check(requirements: OpportunityRequirements, profile: Profile
         else:
             evidence.append(f"Branch requirement met: {profile.branch}")
 
+    if requirements.min_experience_years is not None:
+        required = requirements.min_experience_years
+        if required <= 0:
+            evidence.append("Open to freshers — no prior experience required")
+        elif profile.experience_years is None:
+            missing.append(f"Posting requires {_fmt_years(required)}+ of experience; your work experience isn't set in Profile")
+        elif profile.experience_years < required:
+            evidence.append(
+                f"Requires {_fmt_years(required)}+ of experience, you have {_fmt_years(profile.experience_years)}"
+            )
+            hard_fail = True
+        else:
+            evidence.append(f"Experience requirement met: {_fmt_years(profile.experience_years)} >= {_fmt_years(required)}")
+
     if hard_fail:
         return EligibilityResult(
             decision=EligibilityDecision.NOT_ELIGIBLE,
-            reason="A hard eligibility criterion (CGPA or branch) was not met.",
+            reason="A hard eligibility criterion (CGPA, branch or experience) was not met.",
             evidence=evidence,
             missing_information=missing,
             confidence=1.0,
@@ -81,6 +116,38 @@ def _deterministic_check(requirements: OpportunityRequirements, profile: Profile
     if requirements.raw_eligibility_text:
         return None
 
+    # Absence of criteria is NOT a pass. Found with real LinkedIn alerts: the digest
+    # email only has title/company/location, so nothing was checked and the result came
+    # back "Eligible" for a role that needed 7+ years. Say what we actually know instead.
+    nothing_checked = (
+        requirements.min_cgpa is None
+        and not requirements.allowed_branches
+        and requirements.min_experience_years is None
+    )
+    if requirements.min_experience_years is None and looks_senior(role):
+        return EligibilityResult(
+            decision=EligibilityDecision.UNCERTAIN,
+            reason=(
+                f"The posting doesn't state its experience requirement, and the title ('{role}') "
+                "usually means an experienced hire. Paste the full job description to check properly."
+            ),
+            evidence=evidence,
+            missing_information=["Experience requirement (not in this posting/alert)"],
+            confidence=0.3,
+        )
+    if nothing_checked:
+        return EligibilityResult(
+            decision=EligibilityDecision.UNCERTAIN,
+            reason=(
+                "This posting doesn't list any eligibility criteria (CGPA, branch or experience) — "
+                "job alerts usually only include the title and company. Paste the full job "
+                "description to check properly."
+            ),
+            evidence=[],
+            missing_information=["Eligibility criteria (CGPA, branch, experience) not stated"],
+            confidence=0.3,
+        )
+
     return EligibilityResult(
         decision=EligibilityDecision.ELIGIBLE,
         reason="All deterministic eligibility criteria were met; no qualitative criteria to interpret.",
@@ -95,10 +162,11 @@ async def run_eligibility(
     profile: Profile,
     user_id: str,
     opportunity_id: str,
+    role: str | None = None,
 ) -> tuple[EligibilityResult, AgentExecution]:
     start = time.monotonic()
 
-    deterministic_result = _deterministic_check(requirements, profile)
+    deterministic_result = _deterministic_check(requirements, profile, role)
 
     if deterministic_result is not None:
         # Deterministic path never touches the LLM — this is enforced by simply not
@@ -108,7 +176,10 @@ async def run_eligibility(
             user_id=PydanticObjectId(user_id),
             agent_name="eligibility",
             method="deterministic",
-            input_summary=f"cgpa={profile.cgpa}, branch={profile.branch}, requirements={requirements.model_dump(mode='json')}",
+            input_summary=(
+                f"role={role!r}, cgpa={profile.cgpa}, branch={profile.branch}, "
+                f"experience_years={profile.experience_years}, requirements={requirements.model_dump(mode='json')}"
+            ),
             output=deterministic_result.model_dump(mode="json"),
             status="success",
             latency_ms=latency_ms,
@@ -123,9 +194,12 @@ async def run_eligibility(
     structured_llm = llm.with_structured_output(EligibilityResult)
 
     prompt = (
-        f"Student profile: CGPA={profile.cgpa}, branch={profile.branch}.\n"
+        f"Job title: {role}.\n"
+        f"Student profile: CGPA={profile.cgpa}, branch={profile.branch}, "
+        f"work experience={profile.experience_years if profile.experience_years is not None else 'not stated'} years.\n"
         f"Structured requirements (already verified, all met): "
-        f"min_cgpa={requirements.min_cgpa}, allowed_branches={requirements.allowed_branches}.\n"
+        f"min_cgpa={requirements.min_cgpa}, allowed_branches={requirements.allowed_branches}, "
+        f"min_experience_years={requirements.min_experience_years}.\n"
         f"Qualitative eligibility statement from the job posting that still needs "
         f"interpretation:\n{requirements.raw_eligibility_text}"
     )

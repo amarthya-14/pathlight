@@ -9,7 +9,7 @@ from datetime import datetime
 from beanie import PydanticObjectId
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.agents.schemas import EligibilityResult, SkillGapResult
 from app.models.application import ApplicationStage
@@ -54,6 +54,19 @@ class TailoredResumeOut(BaseModel):
     confidence: float
     warnings: list[str]
     generated_at: datetime
+
+
+class StatusUpdateRequest(BaseModel):
+    # Post-application progress the user records themselves (Pathlight can't see a
+    # company's ATS): online assessment, interview, offer, rejection.
+    stage: Literal["OA", "INTERVIEW", "OFFER", "REJECTED"]
+    note: str | None = Field(default=None, max_length=500)
+
+
+class RecheckRequest(BaseModel):
+    # Optional: the full job description. Without it, eligibility is simply re-run on the
+    # current data (e.g. after updating CGPA or experience in Profile).
+    job_description: str | None = None
 
 
 class ReviewRequest(BaseModel):

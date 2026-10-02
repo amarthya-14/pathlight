@@ -31,6 +31,9 @@ class Profile(Document):
     # (see app/mcp/github_server.py). Public username only — no OAuth/private-repo
     # access exists yet, see that module's scope-decision docstring.
     github_username: str | None = None
+    # Years of full-time work experience (0 = fresher). Checked against a posting's
+    # min_experience_years by the Eligibility Agent.
+    experience_years: float | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

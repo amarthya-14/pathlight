@@ -123,3 +123,24 @@ def test_preparation_plan_not_owned_returns_404(client, monkeypatch):
 def test_preparation_plan_requires_auth(client):
     resp = client.get("/api/applications/000000000000000000000000/preparation-plan")
     assert resp.status_code == 401
+
+
+def test_task_can_be_checked_off(client, monkeypatch):
+    headers = _auth_headers(client, email="tasks-user@example.com")
+    client.put("/api/profile", json={"cgpa": 9.0, "branch": "CSE"}, headers=headers)
+    application_id = _ingest_with_skill_gap(client, monkeypatch, headers, company="TaskCo")["application_id"]
+    plan = client.post(
+        f"/api/applications/{application_id}/preparation-plan", json={"hours_per_day": 2}, headers=headers
+    ).json()
+    task_id = plan["tasks"][0]["id"]
+
+    resp = client.patch(
+        f"/api/applications/{application_id}/preparation-plan/tasks/{task_id}", json={"status": "done"}, headers=headers
+    )
+    assert resp.status_code == 200
+    assert resp.json()["tasks"][0]["status"] == "done"
+    assert client.patch(
+        f"/api/applications/{application_id}/preparation-plan/tasks/000000000000000000000000",
+        json={"status": "done"},
+        headers=headers,
+    ).status_code == 404

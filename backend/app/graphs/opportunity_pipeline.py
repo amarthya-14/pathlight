@@ -96,6 +96,7 @@ async def _persist_opportunity_node(state: PipelineState) -> PipelineState:
         preferred_skills=extraction.preferred_skills,
         compensation=extraction.compensation,
         raw_eligibility_text=extraction.raw_eligibility_text,
+        min_experience_years=extraction.min_experience_years,
         apply_email=extraction.apply_email,
         application_url=extraction.application_url,
     )
@@ -168,7 +169,7 @@ async def _eligibility_node(state: PipelineState) -> PipelineState:
     for _ in range(MAX_ATTEMPTS):
         try:
             eligibility_result, _ = await run_eligibility(
-                requirements, profile, state["user_id"], str(opportunity.id)
+                requirements, profile, state["user_id"], str(opportunity.id), role=opportunity.role
             )
             break
         except Exception as e:
@@ -389,6 +390,49 @@ async def _resume_tailor_node(state: PipelineState) -> PipelineState:
     else:
         state["resume_tailor_note"] = note
     return state
+
+
+async def recheck_application(application: Application, job_description: str | None) -> Application:
+    """Re-evaluates one existing application — after the user pastes the full job
+    description (alert emails only carry title/company/location), or after they update
+    their profile. With a JD: re-extracts requirements with the Discovery Agent and merges
+    them into the opportunity (keeping apply email/link/deadline the JD doesn't mention).
+    Then re-runs Eligibility, Skill Gap and Planner on the current data.
+
+    Raises RuntimeError if Discovery can't read the pasted text."""
+    user_id = str(application.user_id)
+    opportunity = await Opportunity.get(application.opportunity_id)
+
+    if job_description and job_description.strip():
+        extraction, _ = await run_discovery(job_description, "manual_recheck", user_id)
+        old = opportunity.requirements or OpportunityRequirements()
+        opportunity.requirements = OpportunityRequirements(
+            min_cgpa=extraction.min_cgpa,
+            allowed_branches=extraction.allowed_branches,
+            required_skills=extraction.required_skills or old.required_skills,
+            preferred_skills=extraction.preferred_skills or old.preferred_skills,
+            compensation=extraction.compensation or old.compensation,
+            raw_eligibility_text=extraction.raw_eligibility_text,
+            min_experience_years=extraction.min_experience_years,
+            apply_email=extraction.apply_email or old.apply_email,
+            application_url=extraction.application_url or old.application_url,
+        )
+        if extraction.deadline and opportunity.deadline is None:
+            opportunity.deadline = extraction.deadline
+        await opportunity.save()
+
+    state: PipelineState = {
+        "user_id": user_id,
+        "opportunity_id": str(opportunity.id),
+        "application_id": str(application.id),
+        "source": opportunity.source,
+    }
+    state = await _eligibility_node(state)
+    if state.get("needs_human_review"):
+        raise RuntimeError(state.get("error") or "Eligibility check failed")
+    state = await _skill_gap_node(state)
+    await _planner_node(state)
+    return await Application.get(application.id)
 
 
 async def _needs_human_review_node(state: PipelineState) -> PipelineState:

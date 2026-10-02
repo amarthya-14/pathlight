@@ -25,6 +25,10 @@ leave a field null or empty if it is not mentioned. In particular:
 - If eligibility is described in qualitative, non-numeric terms (e.g. "strong problem \
 solving skills preferred"), put that text verbatim in raw_eligibility_text rather than \
 trying to force it into a structured field it doesn't fit.
+- min_experience_years: the minimum years of work experience required, as a number \
+("7+ years" -> 7, "3-5 years" -> 3, "0-2 years", "freshers" or "2025 graduates" -> 0). \
+Leave it null if experience isn't mentioned — a job-alert digest that only lists title, \
+company and location does NOT state an experience requirement.
 - apply_email / application_url: set ONLY if the text literally contains an email \
 address or URL for submitting applications. Never construct one from the company name \
 (e.g. do not invent careers@company.com). Job-alert digests usually contain a link to the \

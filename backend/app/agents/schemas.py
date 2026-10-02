@@ -27,6 +27,9 @@ class ExtractedOpportunity(BaseModel):
     preferred_skills: list[str] = Field(default_factory=list)
     compensation: str | None = None
     raw_eligibility_text: str | None = None
+    # Minimum years of work experience the posting asks for ("7+ years" -> 7, "0-2 years"
+    # or "freshers welcome" -> 0). None = the text doesn't say.
+    min_experience_years: float | None = None
     # Gate 10 — only if literally present in the text, never guessed from the company name.
     apply_email: str | None = None
     application_url: str | None = None

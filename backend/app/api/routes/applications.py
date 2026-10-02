@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from app.agents.schemas import EligibilityDecision
 from app.api.deps import get_current_user
 from app.core.resume_pdf import render_resume_pdf
-from app.graphs.opportunity_pipeline import NO_RESUME_NOTE, latest_resume, tailor_application
+from app.graphs.opportunity_pipeline import NO_RESUME_NOTE, latest_resume, recheck_application, tailor_application
 from app.integrations.google_oauth import get_gmail_integration
 from app.mcp.gmail_client import mcp_send_application_email
 from app.models.application import REVIEW_DECIDED_STAGES, Application, ApplicationStage, ApplicationStatusEvent
@@ -27,7 +27,14 @@ from app.models.opportunity import Company, Opportunity
 from app.models.tailored_resume import TailoredResume
 from app.models.user import User
 from app.retrieval.vector_store import user_has_indexed_resume
-from app.schemas.application import ApplicationOut, ReviewRequest, ReviewResponse, TailoredResumeOut
+from app.schemas.application import (
+    ApplicationOut,
+    RecheckRequest,
+    ReviewRequest,
+    ReviewResponse,
+    StatusUpdateRequest,
+    TailoredResumeOut,
+)
 
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 
@@ -134,6 +141,38 @@ async def _tailored_out(tailored: TailoredResume, current_user: User) -> Tailore
         **tailored.model_dump(exclude={"id", "user_id", "revision_id"}),
         base_resume_text=base.extracted_text if base and base.owner_id == current_user.id else None,
     )
+
+
+@router.post("/{application_id}/status", response_model=ApplicationOut)
+async def update_status(
+    application_id: str, payload: StatusUpdateRequest, current_user: User = Depends(get_current_user)
+):
+    """Records what happened after applying (OA / interview / offer / rejection), so the
+    pipeline tracks a placement through to the end. Only valid once actually applied —
+    an interview for something never applied to is a data-entry mistake, not a state."""
+    application = await _get_owned_application(application_id, current_user)
+    if not any(e.stage == ApplicationStage.APPLIED for e in application.status_history):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Mark this application as applied before recording what happened next.",
+        )
+    application.status_history.append(
+        ApplicationStatusEvent(stage=ApplicationStage(payload.stage), note=payload.note or None)
+    )
+    await application.save()
+    return await _application_out(application, current_user)
+
+
+@router.post("/{application_id}/recheck", response_model=ApplicationOut)
+async def recheck(application_id: str, payload: RecheckRequest, current_user: User = Depends(get_current_user)):
+    """Re-checks eligibility/skill gap — optionally with the full job description pasted
+    by the user, since job-alert emails rarely include real eligibility criteria."""
+    application = await _get_owned_application(application_id, current_user)
+    try:
+        application = await recheck_application(application, payload.job_description)
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Couldn't re-check: {e}")
+    return await _application_out(application, current_user)
 
 
 @router.post("/{application_id}/tailor", response_model=TailoredResumeOut)

@@ -277,3 +277,52 @@ async def test_assisted_apply_pdf_download_and_mark_applied(client, monkeypatch)
     assert marked.json()["status_history"][-1]["stage"] == "APPLIED"
     # ...and only once.
     assert client.post(f"/api/applications/{application_id}/mark-applied", headers=headers).status_code == 409
+
+
+async def test_recheck_with_full_job_description_catches_experience_requirement(client, monkeypatch):
+    """The real-world flow: an alert-sourced application, then the user pastes the full
+    JD that says 7+ years. The re-check must flip it to not eligible."""
+    _uid, headers = _user(client, "recheck@example.com")
+    client.put("/api/profile", json={"cgpa": 9.0, "branch": "CSE", "experience_years": 0}, headers=headers)
+    application_id = _ingest_ready(client, monkeypatch, headers, apply_email=None,
+                                   application_url="https://www.linkedin.com/jobs/view/99")
+
+    full_jd = ExtractedOpportunity(
+        company_name="ReviewCo", role="Backend Intern", required_skills=["Python", "Kafka"], min_experience_years=7
+    )
+    monkeypatch.setattr("app.agents.discovery.get_small_llm", lambda: FakeLLM(canned_result=full_jd))
+
+    resp = client.post(
+        f"/api/applications/{application_id}/recheck",
+        json={"job_description": "Backend role. 7+ years of experience required. Python, Kafka."},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["eligibility"]["decision"] == "not_eligible"
+    assert "Kafka" in body["skill_gap"]["missing"]
+    # The posting link from the original alert is kept.
+    assert body["application_url"] == "https://www.linkedin.com/jobs/view/99"
+
+
+async def test_post_apply_status_tracking(client, monkeypatch):
+    _uid, headers = _user(client, "status-track@example.com")
+    application_id = _ingest_ready(client, monkeypatch, headers, apply_email=None,
+                                   application_url="https://www.linkedin.com/jobs/view/5")
+
+    # Can't record an interview for something not applied to yet.
+    early = client.post(f"/api/applications/{application_id}/status", json={"stage": "INTERVIEW"}, headers=headers)
+    assert early.status_code == 409
+
+    client.post(f"/api/applications/{application_id}/review", json={"approve": True}, headers=headers)
+    client.post(f"/api/applications/{application_id}/mark-applied", headers=headers)
+
+    resp = client.post(
+        f"/api/applications/{application_id}/status", json={"stage": "INTERVIEW", "note": "Round 1 on Monday"}, headers=headers
+    )
+    assert resp.status_code == 200
+    last = resp.json()["status_history"][-1]
+    assert last["stage"] == "INTERVIEW" and last["note"] == "Round 1 on Monday"
+
+    bad = client.post(f"/api/applications/{application_id}/status", json={"stage": "DISCOVERED"}, headers=headers)
+    assert bad.status_code == 422

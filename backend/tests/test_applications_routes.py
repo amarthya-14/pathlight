@@ -38,7 +38,8 @@ def test_list_applications_includes_company_role_and_eligibility(client, monkeyp
     assert len(body) == 1
     assert body[0]["company_name"] == "ListCo"
     assert body[0]["role"] == "Backend Intern"
-    assert body[0]["eligibility"]["decision"] == "eligible"
+    # No criteria in the posting -> honestly "uncertain", never a free "eligible" pass.
+    assert body[0]["eligibility"]["decision"] == "uncertain"
 
 
 def test_get_application_detail_not_owned_returns_404(client, monkeypatch):

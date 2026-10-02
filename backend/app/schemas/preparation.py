@@ -13,6 +13,10 @@ class PreparationPlanRequest(BaseModel):
     hours_per_day: float = Field(gt=0)
 
 
+class TaskStatusUpdate(BaseModel):
+    status: TaskStatus
+
+
 class PreparationTaskOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: PydanticObjectId

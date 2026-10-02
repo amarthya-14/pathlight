@@ -14,7 +14,7 @@ from app.models.application import Application
 from app.models.opportunity import Opportunity
 from app.models.preparation import PreparationPlan
 from app.models.user import User
-from app.schemas.preparation import PreparationPlanOut, PreparationPlanRequest
+from app.schemas.preparation import PreparationPlanOut, PreparationPlanRequest, TaskStatusUpdate
 
 router = APIRouter(prefix="/api/applications/{application_id}/preparation-plan", tags=["preparation"])
 
@@ -91,4 +91,26 @@ async def get_preparation_plan(application_id: str, current_user: User = Depends
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No preparation plan exists yet for this application.",
         )
+    return plan
+
+
+@router.patch("/tasks/{task_id}", response_model=PreparationPlanOut)
+async def update_task_status(
+    application_id: str,
+    task_id: str,
+    payload: TaskStatusUpdate,
+    current_user: User = Depends(get_current_user),
+):
+    """Ticks a prep task off (or back on) — the plan becomes a checklist you work
+    through, not a static estimate. Regenerating the plan resets progress, by design:
+    a regenerated plan can have different tasks."""
+    application = await _get_owned_application(application_id, current_user)
+    plan = await PreparationPlan.find_one(PreparationPlan.application_id == application.id)
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No preparation plan exists yet.")
+    task = next((t for t in plan.tasks if str(t.id) == task_id), None)
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    task.status = payload.status
+    await plan.save()
     return plan
