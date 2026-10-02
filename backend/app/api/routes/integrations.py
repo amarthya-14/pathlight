@@ -7,9 +7,10 @@ connected and doesn't want to wait up to GMAIL_POLL_INTERVAL_SECONDS.
 No route here ever returns a token. Responses go through IntegrationOut, which has no
 token fields at all.
 """
+import hmac
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import RedirectResponse
 
 from app.api.deps import get_current_user
@@ -26,9 +27,25 @@ from app.integrations.google_oauth import (
 from app.models.integration import Integration
 from app.models.user import User
 from app.schemas.integration import GmailConnectOut, GmailSyncOut, IntegrationOut
-from app.workers.gmail_poll import poll_integration
+from app.workers.gmail_poll import poll_all_once, poll_integration
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
+internal_router = APIRouter(prefix="/api/internal", include_in_schema=False)
+
+
+@internal_router.post("/gmail/poll")
+async def cron_gmail_poll(x_cron_secret: str | None = Header(default=None)):
+    """Gate 11: called every 30 min by .github/workflows/gmail-poll.yml. On a free host
+    that sleeps when idle, the request itself wakes the server, then this runs the same
+    poll the in-process loop would have. 404 (not 401/403) when the secret is missing or
+    wrong, so the route doesn't advertise its existence."""
+    if not settings.CRON_SECRET or not x_cron_secret or not hmac.compare_digest(x_cron_secret, settings.CRON_SECRET):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    results = await poll_all_once()
+    return {
+        "users_polled": len(results),
+        "opportunities_ingested": sum(r.opportunities_ingested for r in results.values()),
+    }
 
 
 def _frontend_redirect(**params: str) -> RedirectResponse:

@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import settings
+from app.core.config import check_production_settings, settings
 from app.core.db import init_db
 from app.api.routes import auth, opportunities, documents, profile, ingest, preparation, applications, dashboard, integrations
 from app.integrations.google_oauth import oauth_configured
@@ -22,6 +22,12 @@ from app.workers.gmail_poll import run_poll_loop
 async def lifespan(app: FastAPI):
     # Connects to MongoDB and registers Document models with Beanie. Tests override
     # this behavior (see tests/conftest.py) so they never touch a real MongoDB.
+    if settings.ENVIRONMENT == "production":
+        problems = check_production_settings(settings)
+        if problems:
+            # Fail the deploy loudly rather than serve real users with a guessable JWT
+            # secret or a localhost database.
+            raise RuntimeError("Refusing to start in production: " + "; ".join(problems))
     await init_db()
 
     # Gate 10: Gmail job-alert poller, in-process (docs/AUTONOMOUS_APPLICATIONS.md §5).
@@ -48,6 +54,7 @@ app = FastAPI(title="Pathlight API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()],
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX or None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,6 +69,7 @@ app.include_router(preparation.router)
 app.include_router(applications.router)
 app.include_router(dashboard.router)
 app.include_router(integrations.router)
+app.include_router(integrations.internal_router)
 
 
 @app.get("/health")

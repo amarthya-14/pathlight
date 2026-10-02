@@ -1,0 +1,11 @@
+# Keep local state and secrets out of the image (Gate 11).
+.venv/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+chroma_data/
+data/
+tests/
+eval/
+.DS_Store
+.env

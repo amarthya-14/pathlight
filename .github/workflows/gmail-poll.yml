@@ -1,0 +1,24 @@
+# Gate 11: wakes the free-tier backend (Render sleeps after 15 min idle) and triggers the
+# Gmail job-alert poll. Needs repo secrets BACKEND_URL and CRON_SECRET (same value as the
+# Render env var). See docs/DEPLOYMENT.md.
+name: Gmail poll
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    if: ${{ vars.ENABLE_GMAIL_POLL == 'true' }}
+    steps:
+      - name: Trigger poll
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          # First request may take ~60s while the free instance wakes up.
+          curl --fail --silent --show-error --max-time 300 --retry 2 --retry-delay 20 \
+            -X POST "$BACKEND_URL/api/internal/gmail/poll" \
+            -H "X-Cron-Secret: $CRON_SECRET"

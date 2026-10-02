@@ -117,7 +117,17 @@ async def _record_poll(integration: Integration, processed: list[str], error: st
     await fresh.save()
 
 
+# The in-process loop and the cron-triggered route (Gate 11) can fire at the same time;
+# one poll at a time per process keeps them from processing the same email twice.
+_poll_lock = asyncio.Lock()
+
+
 async def poll_all_once() -> dict[str, PollResult]:
+    async with _poll_lock:
+        return await _poll_all_once_unlocked()
+
+
+async def _poll_all_once_unlocked() -> dict[str, PollResult]:
     results: dict[str, PollResult] = {}
     integrations = await Integration.find(
         Integration.provider == "gmail", Integration.status == "connected"

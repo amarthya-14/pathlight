@@ -101,3 +101,21 @@ async def test_sync_route_runs_poll_for_current_user(client, monkeypatch):
     apps = client.get("/api/applications", headers=headers).json()
     assert apps[0]["source"] == "gmail_mcp"
     assert apps[0]["application_url"] == "https://www.linkedin.com/jobs/view/987"
+
+
+async def test_cron_poll_requires_secret(client, monkeypatch):
+    configure_oauth(monkeypatch)
+    FakeGoogle([gmail_message("c1", "Alert", "AlertCo is hiring...")]).install(monkeypatch)
+    _fake_llms(monkeypatch)
+    user_id, _headers = _user(client, "cron@example.com")
+    await connect_gmail(user_id)
+
+    # Disabled entirely when no secret is configured.
+    assert client.post("/api/internal/gmail/poll").status_code == 404
+
+    monkeypatch.setattr("app.core.config.settings.CRON_SECRET", "s3cret-value")
+    assert client.post("/api/internal/gmail/poll", headers={"X-Cron-Secret": "wrong"}).status_code == 404
+
+    resp = client.post("/api/internal/gmail/poll", headers={"X-Cron-Secret": "s3cret-value"})
+    assert resp.status_code == 200
+    assert resp.json() == {"users_polled": 1, "opportunities_ingested": 1}

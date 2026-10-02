@@ -177,7 +177,7 @@ second person keeping a different gate moving in parallel anymore.
 | 8 | Frontend dashboard | Done — see §16 |
 | 9 | Testing + evaluation | Done — see §17 |
 | 10 | Autonomous Application Pipeline — Part 1, off-campus (Gmail-sourced discovery, resume tailoring, human-reviewed email apply) | ✅ Implemented (email-apply phase) — see `docs/AUTONOMOUS_APPLICATIONS.md` §12; real-Gmail smoke test still pending |
-| 11 | Cloud deployment | Pending |
+| 11 | Cloud deployment (Vercel + Render + MongoDB Atlas, free tier) | ✅ Deployment-ready — production image verified locally; see `docs/DEPLOYMENT.md` |
 | 12 | Security + observability | Pending |
 | 13 | Final demonstration | Pending |
 

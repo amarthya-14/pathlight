@@ -60,11 +60,41 @@ async def index_resume_chunks(user_id: str, document_id: str, text: str) -> int:
 
 
 async def user_has_indexed_resume(user_id: str) -> bool:
-    """Cheap existence check (no embedding call needed) — lets the Skill Gap Agent tell
-    'no resume on file' apart from 'resume on file but no skill evidence found'."""
+    """Existence check — lets the Skill Gap Agent tell 'no resume on file' apart from
+    'resume on file but no skill evidence found'. Cheap (no embedding call) whenever the
+    index is intact.
+
+    Gate 11: if the user has no chunks but DOES have a resume in MongoDB, the index is
+    rebuilt from that resume's stored text first. Free cloud hosts (Render free tier) have
+    an ephemeral disk wiped on every restart/redeploy, taking Chroma's files with it —
+    MongoDB (Atlas) is the source of truth, Chroma is a rebuildable cache. Lazy and
+    per-user, so a restart costs one embedding call per *active* user, not a startup burst."""
     collection = get_resume_chunks_collection()
     existing = collection.get(where={"user_id": user_id}, limit=1)
-    return len(existing["ids"]) > 0
+    if existing["ids"]:
+        return True
+    return await _reindex_latest_resume_from_db(user_id)
+
+
+async def _reindex_latest_resume_from_db(user_id: str) -> bool:
+    # Imported here: app.models.document is a Beanie model, and this module is imported
+    # by code paths (tests, scripts) that don't always need Beanie initialized.
+    from beanie import PydanticObjectId
+
+    from app.models.document import Document, DocumentType
+
+    try:
+        owner_id = PydanticObjectId(user_id)
+    except Exception:
+        return False  # not a real user id — nothing in MongoDB to rebuild from
+    resume = await Document.find(
+        Document.owner_id == owner_id,
+        Document.doc_type == DocumentType.RESUME,
+        Document.extracted_text != None,  # noqa: E711 — Beanie query expression
+    ).sort(-Document.created_at).first_or_none()
+    if resume is None or not resume.extracted_text.strip():
+        return False
+    return await index_resume_chunks(user_id, str(resume.id), resume.extracted_text) > 0
 
 
 async def query_resume_chunks(user_id: str, query_text: str, n_results: int = 1) -> list[tuple[str, float]]:

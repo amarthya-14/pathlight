@@ -72,3 +72,22 @@ async def test_empty_text_indexes_nothing(client):
     count = await index_resume_chunks("user-4", "doc-4", "")
     assert count == 0
     assert await user_has_indexed_resume("user-4") is False
+
+
+async def test_index_rebuilds_from_mongo_after_disk_wipe(client):
+    """Gate 11: on free cloud hosts the disk (and Chroma with it) is wiped on restart.
+    MongoDB keeps the resume text, so the index must rebuild itself on first use."""
+    import app.retrieval.vector_store as vs
+
+    client.post("/api/auth/register", json={"email": "wipe@example.com", "password": "testpass123"})
+    login = client.post("/api/auth/login", data={"username": "wipe@example.com", "password": "testpass123"})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    user_id = client.get("/api/auth/me", headers=headers).json()["id"]
+    client.post("/api/documents/paste", json={"doc_type": "resume", "title": "R", "text": "Python developer"}, headers=headers)
+
+    # Simulate the restart: Chroma's data is gone.
+    vs.get_resume_chunks_collection().delete(where={"user_id": user_id})
+    assert vs.get_resume_chunks_collection().get(where={"user_id": user_id})["ids"] == []
+
+    assert await vs.user_has_indexed_resume(user_id) is True
+    assert vs.get_resume_chunks_collection().get(where={"user_id": user_id})["ids"] != []

@@ -54,3 +54,18 @@ real OAuth — see the note below.
   locked in `AI_DESIGN.md`; enforced once agents exist at Gate 4).
 - Audit: `AgentExecution` collection (Gate 4) + lightweight `AuditLog` for auth/
   data-deletion/MCP connect-disconnect events.
+
+## Gate 11 — deployment hardening
+- `ENVIRONMENT=production` fail-fast: the backend refuses to start with a weak/default
+  `JWT_SECRET`, a localhost `MONGO_URI`, missing `GOOGLE_API_KEY`, Gmail without
+  `TOKEN_ENCRYPTION_KEY`, or localhost `FRONTEND_URL`/OAuth redirect
+  (`app/core/config.py::check_production_settings`, tested).
+- MongoDB auth: production uses MongoDB Atlas (auth + TLS by default) — resolves the
+  "local dev container has no auth" item above for the deployed instance.
+- Container runs as a non-root user; `.dockerignore` keeps `.env`, local data and the
+  venv out of the image.
+- CORS: explicit origin list plus an optional, anchored regex for Vercel previews; any
+  other origin gets no CORS headers (verified against the production image).
+- `POST /api/internal/gmail/poll` (cron) requires `X-Cron-Secret`, compared in constant
+  time, and answers 404 when absent/wrong so it isn't discoverable.
+- Still Gate 12: rate limiting on auth/public endpoints, structured logging/monitoring.

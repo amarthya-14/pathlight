@@ -1,0 +1,45 @@
+# Render Blueprint — Gate 11 (docs/DEPLOYMENT.md). Render → New → Blueprint → pick this repo.
+# Secrets are `sync: false`: Render prompts for them on first deploy; they never live in git.
+services:
+  - type: web
+    name: pathlight-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: singapore  # closest free region to India
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: MONGO_DB_NAME
+        value: pathlight
+      - key: MONGO_URI
+        sync: false  # MongoDB Atlas connection string
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: LLM_MODEL_SMALL
+        value: gemini-3.1-flash-lite
+      - key: LLM_MODEL_STRONG
+        value: gemini-3.6-flash
+      - key: EMBEDDING_MODEL
+        value: gemini-embedding-001
+      - key: FRONTEND_URL
+        sync: false  # e.g. https://pathlight.vercel.app
+      - key: CORS_ORIGINS
+        sync: false  # same as FRONTEND_URL
+      - key: CORS_ORIGIN_REGEX
+        sync: false  # optional, for Vercel preview URLs
+      - key: GMAIL_MCP_CLIENT_ID
+        sync: false
+      - key: GMAIL_MCP_CLIENT_SECRET
+        sync: false
+      - key: GMAIL_OAUTH_REDIRECT_URI
+        sync: false  # https://<service>.onrender.com/api/integrations/gmail/callback
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false  # copy the SAME key as local only if migrating local tokens; else generate fresh
+      - key: CRON_SECRET
+        generateValue: true

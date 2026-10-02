@@ -43,7 +43,15 @@ async def ingest_opportunity(payload: IngestRequest, current_user: User = Depend
 
         # Read via the Filesystem MCP tool, not by touching disk directly here — this is
         # the standardized interface every agent (and, later, every MCP tool) uses.
-        raw_text = await mcp_read_document(str(current_user.id), document.storage_filename)
+        try:
+            raw_text = await mcp_read_document(str(current_user.id), document.storage_filename)
+        except Exception:
+            # Gate 11: the uploaded file can be gone (ephemeral disk on free cloud hosts,
+            # wiped on restart) while its extracted text is safe in MongoDB — use that
+            # rather than fail. No text at all is a genuine 404.
+            if not document.extracted_text:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document content not available")
+            raw_text = document.extracted_text
         source = f"document:{document.doc_type.value}"
     else:
         raw_text = payload.raw_text

@@ -60,6 +60,17 @@ class Settings(BaseSettings):
     # existing test could have caught this). Comma-separated origins, matching
     # NEXT_PUBLIC_API_URL's counterpart on the frontend side (.env.example).
     CORS_ORIGINS: str = "http://localhost:3000"
+    # Gate 11: optional regex for extra allowed origins — Vercel gives every preview
+    # deployment its own URL (pathlight-git-<branch>-<user>.vercel.app), which a fixed
+    # list can't cover. e.g. ^https://pathlight-[a-z0-9-]+\.vercel\.app$
+    CORS_ORIGIN_REGEX: str = ""
+
+    # Gate 11 — deployment. "production" turns on fail-fast checks for insecure defaults.
+    ENVIRONMENT: str = "development"
+    # Shared secret for POST /api/internal/gmail/poll, called by a GitHub Actions cron.
+    # Free hosts (Render) sleep when idle, and a sleeping server's in-process poller
+    # doesn't run — the cron both wakes it and triggers the poll. Empty = route disabled.
+    CRON_SECRET: str = ""
 
     # Gate 10 — Gmail MCP (real per-user Google OAuth2) + autonomous applications. See
     # docs/AUTONOMOUS_APPLICATIONS.md. GMAIL_MCP_CLIENT_ID/SECRET have been stubbed in
@@ -89,3 +100,22 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def check_production_settings(s: Settings) -> list[str]:
+    """Insecure defaults that are fine locally but must never reach a public deployment.
+    Returns the problems found; app startup refuses to run in production if any exist."""
+    problems = []
+    if s.JWT_SECRET in ("", "changeme") or len(s.JWT_SECRET) < 32:
+        problems.append("JWT_SECRET must be a random string of at least 32 characters")
+    if "localhost" in s.MONGO_URI or "127.0.0.1" in s.MONGO_URI:
+        problems.append("MONGO_URI points at localhost — use your MongoDB Atlas connection string")
+    if not s.GOOGLE_API_KEY or s.GOOGLE_API_KEY == "changeme":
+        problems.append("GOOGLE_API_KEY is not set")
+    if s.GMAIL_MCP_CLIENT_ID and not s.TOKEN_ENCRYPTION_KEY:
+        problems.append("TOKEN_ENCRYPTION_KEY is required when Gmail is configured")
+    if s.GMAIL_MCP_CLIENT_ID and "localhost" in s.GMAIL_OAUTH_REDIRECT_URI:
+        problems.append("GMAIL_OAUTH_REDIRECT_URI still points at localhost")
+    if "localhost" in s.FRONTEND_URL:
+        problems.append("FRONTEND_URL still points at localhost")
+    return problems
