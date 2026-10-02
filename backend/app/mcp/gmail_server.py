@@ -139,7 +139,12 @@ async def get_message(user_id: str, message_id: str) -> dict:
 
 
 def build_raw_message(
-    to: str, subject: str, body_text: str, attachment_filename: str | None, attachment_text: str | None
+    to: str,
+    subject: str,
+    body_text: str,
+    attachment_filename: str | None,
+    attachment_b64: str | None,
+    attachment_mime: str = "application/pdf",
 ) -> str:
     msg = EmailMessage()
     msg["To"] = to
@@ -147,11 +152,12 @@ def build_raw_message(
     # No From header: Gmail sets it to the authenticated account, which is exactly right
     # and avoids any chance of spoofing a different sender.
     msg.set_content(body_text)
-    if attachment_filename and attachment_text is not None:
+    if attachment_filename and attachment_b64 is not None:
+        maintype, _, subtype = attachment_mime.partition("/")
         msg.add_attachment(
-            attachment_text.encode("utf-8"),
-            maintype="text",
-            subtype="plain",
+            base64.b64decode(attachment_b64),
+            maintype=maintype,
+            subtype=subtype or "octet-stream",
             filename=attachment_filename,
         )
     return base64.urlsafe_b64encode(msg.as_bytes()).decode()
@@ -164,12 +170,14 @@ async def send_message(
     subject: str,
     body_text: str,
     attachment_filename: str | None = None,
-    attachment_text: str | None = None,
+    attachment_b64: str | None = None,
+    attachment_mime: str = "application/pdf",
 ) -> dict:
     """SENDS AN EMAIL from the user's Gmail account. Irreversible. Only ever invoked by
-    the human-approved review route — see module docstring."""
+    the human-approved review route — see module docstring. The attachment travels as
+    base64 because MCP tool arguments are JSON."""
     headers = await _authed_headers(user_id)
-    raw = build_raw_message(to, subject, body_text, attachment_filename, attachment_text)
+    raw = build_raw_message(to, subject, body_text, attachment_filename, attachment_b64, attachment_mime)
     async with httpx.AsyncClient(timeout=15.0) as http_client:
         response = await http_client.post(
             f"{GMAIL_API_BASE}/messages/send", json={"raw": raw}, headers=headers

@@ -298,6 +298,25 @@ beyond the design above, stated plainly:
   unsupported embellishment), and its own warning wording differed from the deterministic
   one, producing duplicate warnings (dedupe now matches by skill name; regression test added).
 
+**After the first live Gmail sync (2026-10-03)**
+- Real alerts arrived before the user had a resume on file, so tailoring silently no-op'd
+  and no Apply action appeared. Fixed: `POST /api/applications/{id}/tailor` regenerates on
+  demand, the detail page shows a "Get ready to apply" card explaining why, and Profile
+  now takes the resume as a **file upload** (PDF/TXT; scanned PDFs are flagged).
+- Real LinkedIn alerts carry only a posting link, never an apply email — so for most
+  real postings, email-apply can't fire. Decision (user's): **assisted apply**, not a
+  LinkedIn bot (automation is against LinkedIn's User Agreement and risks the user's
+  account). One click on "Apply on LinkedIn" opens the posting, copies the cover note,
+  downloads the tailored resume as a **PDF** (`GET /tailored-resume.pdf`, rendered by
+  `app/core/resume_pdf.py` with vendored DejaVu Sans for Unicode), and records the
+  approval; the user presses Submit on the site and confirms via
+  `POST /api/applications/{id}/mark-applied` → `APPLIED`. Email applications now attach
+  the same PDF instead of a `.txt`.
+- Inbox check against real mail: `jobalerts-noreply@linkedin.com` (30) and
+  `jobs-noreply@linkedin.com` (2) confirmed as the real alert senders; LinkedIn's other
+  senders (messages, invitations, security) correctly excluded. Naukri senders still
+  unconfirmed (no Naukri mail in that inbox).
+
 **Still owed before calling this demo-ready (per §9)**
 - A real end-to-end Gmail run: Google Cloud OAuth client (Web application, Gmail API
   enabled, `GMAIL_OAUTH_REDIRECT_URI` registered, your account added as a test user while

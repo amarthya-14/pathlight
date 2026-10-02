@@ -193,3 +193,87 @@ async def test_review_claim_is_atomic(client, monkeypatch):
 
     await _release_review(application_id)
     assert await _claim_review(application_id) is True
+
+
+async def test_tailor_on_demand_after_uploading_resume(client, monkeypatch):
+    """Applications ingested before any resume existed (the real-world case that showed up
+    with the first live Gmail sync) can be tailored afterwards without re-ingesting."""
+    client.post("/api/auth/register", json={"email": "late-resume@example.com", "password": "testpass123"})
+    login = client.post("/api/auth/login", data={"username": "late-resume@example.com", "password": "testpass123"})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    client.put("/api/profile", json={"cgpa": 9.0, "branch": "CSE"}, headers=headers)
+
+    extracted = ExtractedOpportunity(company_name="LateCo", role="Backend Intern", required_skills=["Python"])
+    monkeypatch.setattr("app.agents.discovery.get_small_llm", lambda: FakeLLM(canned_result=extracted))
+    application_id = client.post(
+        "/api/opportunities/ingest", json={"raw_text": "LateCo hiring"}, headers=headers
+    ).json()["application_id"]
+
+    no_resume = client.post(f"/api/applications/{application_id}/tailor", headers=headers)
+    assert no_resume.status_code == 400
+    assert "No resume on file" in no_resume.json()["detail"]
+
+    client.post("/api/documents/upload", data={"doc_type": "resume"},
+                files={"file": ("resume.txt", RESUME.encode(), "text/plain")}, headers=headers)
+    tailored = TailoredResumeResult(tailored_text=RESUME, cover_note="Dear Hiring Team,", confidence=0.7)
+    monkeypatch.setattr("app.agents.resume_tailor.get_strong_llm", lambda: FakeLLM(canned_result=tailored))
+
+    resp = client.post(f"/api/applications/{application_id}/tailor", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["base_resume_text"] == RESUME
+    detail = client.get(f"/api/applications/{application_id}", headers=headers).json()
+    assert detail["status_history"][-1]["stage"] == "READY_TO_APPLY"
+
+    # Regenerating doesn't stack duplicate READY_TO_APPLY events.
+    client.post(f"/api/applications/{application_id}/tailor", headers=headers)
+    detail = client.get(f"/api/applications/{application_id}", headers=headers).json()
+    assert [e["stage"] for e in detail["status_history"]].count("READY_TO_APPLY") == 1
+
+
+async def test_sent_application_attaches_a_pdf_resume(client, monkeypatch):
+    import base64
+    import email
+    import email.policy
+
+    configure_oauth(monkeypatch)
+    google = FakeGoogle().install(monkeypatch)
+    user_id, headers = _user(client, "review-pdf@example.com")
+    await connect_gmail(user_id)
+    application_id = _ingest_ready(client, monkeypatch, headers)
+
+    client.post(f"/api/applications/{application_id}/review", json={"approve": True}, headers=headers)
+
+    parsed = email.message_from_bytes(base64.urlsafe_b64decode(google.sent[0]["raw"] + "=="), policy=email.policy.default)
+    attachment = list(parsed.iter_parts())[1]
+    assert attachment.get_content_type() == "application/pdf"
+    assert attachment.get_filename().endswith(".pdf")
+    assert attachment.get_content().startswith(b"%PDF")
+
+
+async def test_assisted_apply_pdf_download_and_mark_applied(client, monkeypatch):
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    _uid, headers = _user(client, "assisted@example.com")
+    application_id = _ingest_ready(
+        client, monkeypatch, headers, apply_email=None, application_url="https://www.linkedin.com/jobs/view/7"
+    )
+
+    pdf = client.get(f"/api/applications/{application_id}/tailored-resume.pdf", headers=headers)
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert ".pdf" in pdf.headers["content-disposition"]
+    assert "Python (primary)" in PdfReader(BytesIO(pdf.content)).pages[0].extract_text()
+
+    # Can't mark applied before approving.
+    assert client.post(f"/api/applications/{application_id}/mark-applied", headers=headers).status_code == 409
+
+    approved = client.post(f"/api/applications/{application_id}/review", json={"approve": True}, headers=headers)
+    assert approved.json()["outcome"] == "manual_apply_required"
+
+    marked = client.post(f"/api/applications/{application_id}/mark-applied", headers=headers)
+    assert marked.status_code == 200
+    assert marked.json()["status_history"][-1]["stage"] == "APPLIED"
+    # ...and only once.
+    assert client.post(f"/api/applications/{application_id}/mark-applied", headers=headers).status_code == 409

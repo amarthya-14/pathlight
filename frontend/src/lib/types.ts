@@ -121,6 +121,11 @@ export type DocumentOut = {
   created_at: string;
 };
 
+export type DocumentDetailOut = DocumentOut & {
+  storage_filename: string;
+  extracted_text: string | null;
+};
+
 export type IngestResponse = {
   opportunity_id: string;
   application_id: string;

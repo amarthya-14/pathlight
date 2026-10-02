@@ -28,6 +28,27 @@ describe("api.request", () => {
     vi.unstubAllGlobals();
   });
 
+  it("uploads a resume file as multipart without forcing a Content-Type", async () => {
+    setToken("tok");
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: "d1", extracted_text: "Python" }),
+    });
+
+    const file = new File(["%PDF-1.4"], "resume.pdf", { type: "application/pdf" });
+    await api.uploadDocument(file, "resume");
+
+    const [url, options] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).toBe("http://localhost:8000/api/documents/upload");
+    expect(options.body).toBeInstanceOf(FormData);
+    expect((options.body as FormData).get("doc_type")).toBe("resume");
+    expect(((options.body as FormData).get("file") as File).name).toBe("resume.pdf");
+    // The browser must set multipart/form-data with its boundary itself.
+    expect(options.headers["Content-Type"]).toBeUndefined();
+    expect(options.headers["Authorization"]).toBe("Bearer tok");
+  });
+
   it("sends a JSON body and returns the parsed response on success", async () => {
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,

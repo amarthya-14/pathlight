@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Code2, TriangleAlert } from "lucide-react";
+import { CheckCircle2, Code2, FileUp, TriangleAlert } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth-context";
 import { api, ApiError } from "@/lib/api";
 import type { DocumentOut, ProfileOut } from "@/lib/types";
@@ -20,6 +20,8 @@ export default function ProfilePage() {
   const [documents, setDocuments] = useState<DocumentOut[]>([]);
   const [resumeText, setResumeText] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [showPaste, setShowPaste] = useState(false);
 
   const loadDocuments = () => {
     api.listDocuments().then(setDocuments).catch(() => {});
@@ -56,6 +58,34 @@ export default function ProfilePage() {
     }
   };
 
+  const onUploadResumeFile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resumeFile) return;
+    setUploading(true);
+    setError(null);
+    setSaveMessage(null);
+    try {
+      const doc = await api.uploadDocument(resumeFile, "resume");
+      setResumeFile(null);
+      (e.target as HTMLFormElement).reset();
+      loadDocuments();
+      if (!doc.extracted_text || !doc.extracted_text.trim()) {
+        setError(
+          "Uploaded, but no text could be read from this file (likely a scanned/image PDF). " +
+            "Export your resume as a text-based PDF, or paste the text instead."
+        );
+      } else {
+        setSaveMessage(
+          "Resume uploaded and indexed. Open any application and click “Generate tailored resume” to get it ready to apply."
+        );
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Failed to upload resume");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const onUploadResume = async (e: React.FormEvent) => {
     e.preventDefault();
     setUploading(true);
@@ -81,7 +111,8 @@ export default function ProfilePage() {
     );
   }
 
-  const hasResume = documents.some((d) => d.doc_type === "resume");
+  const latestResume = documents.find((d) => d.doc_type === "resume"); // list is newest-first
+  const hasResume = latestResume !== undefined;
 
   return (
     <div className="animate-fade-in max-w-xl space-y-10">
@@ -122,25 +153,55 @@ export default function ProfilePage() {
         <div className="card-shadow space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
           {hasResume ? (
             <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3.5 py-2.5 text-sm font-medium text-emerald-700">
-              <CheckCircle2 size={16} /> A resume is on file and indexed for Skill Gap matching.
+              <CheckCircle2 size={16} /> Using <span className="font-semibold">{latestResume.original_filename}</span> for
+              Skill Gap and tailored resumes.
             </div>
           ) : (
             <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-3.5 py-2.5 text-sm font-medium text-amber-800">
               <TriangleAlert size={16} /> No resume on file — Skill Gap results will show every skill as missing.
             </div>
           )}
-          <form onSubmit={onUploadResume} className="space-y-3">
-            <TextArea
-              required
-              rows={6}
-              value={resumeText}
-              onChange={(e) => setResumeText(e.target.value)}
-              placeholder="Paste your resume text here…"
-            />
-            <Button type="submit" variant="secondary" disabled={uploading}>
-              {uploading ? "Uploading…" : "Add / replace resume"}
+          <form onSubmit={onUploadResumeFile} className="space-y-3">
+            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 px-4 py-6 text-center transition-colors hover:border-indigo-300 hover:bg-indigo-50/40">
+              <FileUp size={22} className="text-indigo-500" />
+              <span className="text-sm font-medium text-slate-700">
+                {resumeFile ? resumeFile.name : "Choose your resume file"}
+              </span>
+              <span className="text-xs text-slate-400">PDF or TXT, up to 10MB · text-based PDFs only (not scans)</span>
+              <input
+                type="file"
+                accept=".pdf,.txt,application/pdf,text/plain"
+                className="sr-only"
+                data-testid="resume-file-input"
+                onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+            <Button type="submit" disabled={uploading || !resumeFile}>
+              {uploading && resumeFile ? "Uploading…" : hasResume ? "Upload & replace resume" : "Upload resume"}
             </Button>
           </form>
+
+          <button
+            type="button"
+            onClick={() => setShowPaste((v) => !v)}
+            className="text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline"
+          >
+            {showPaste ? "Hide text paste" : "Or paste resume text instead"}
+          </button>
+          {showPaste && (
+            <form onSubmit={onUploadResume} className="space-y-3">
+              <TextArea
+                required
+                rows={6}
+                value={resumeText}
+                onChange={(e) => setResumeText(e.target.value)}
+                placeholder="Paste your resume text here…"
+              />
+              <Button type="submit" variant="secondary" disabled={uploading}>
+                {uploading ? "Saving…" : "Save pasted resume"}
+              </Button>
+            </form>
+          )}
         </div>
       </section>
 

@@ -294,12 +294,82 @@ async def _planner_node(state: PipelineState) -> PipelineState:
     return state
 
 
-async def _latest_resume(user_id: str) -> Document | None:
+async def latest_resume(user_id: str) -> Document | None:
     return await Document.find(
         Document.owner_id == PydanticObjectId(user_id),
         Document.doc_type == DocumentType.RESUME,
         Document.extracted_text != None,  # noqa: E711 — Beanie query expression, not a Python comparison
     ).sort(-Document.created_at).first_or_none()
+
+
+NO_RESUME_NOTE = (
+    "No resume on file — a tailored resume could not be generated. "
+    "Upload a resume on your Profile to enable reviewing and applying."
+)
+
+
+async def tailor_application(application: Application, skill_gap: SkillGapResult | None) -> tuple[TailoredResume | None, str | None]:
+    """Generates (or regenerates) the TailoredResume for one application and moves it to
+    READY_TO_APPLY. Shared by the pipeline node and the on-demand route
+    (POST /api/applications/{id}/tailor — e.g. after uploading a resume for postings that
+    were ingested before one existed). Returns (tailored, None) on success or
+    (None, reason) when it couldn't — never raises, a failure here only degrades this step."""
+    if any(e.stage in REVIEW_DECIDED_STAGES for e in application.status_history):
+        # The user already decided on this posting (applied/skipped). Re-ingesting the
+        # same posting (e.g. it reappears in tomorrow's alert digest) must never reopen
+        # review — that's how a second application email would get sent.
+        return None, "You've already reviewed this application."
+
+    user_id = str(application.user_id)
+    resume = await latest_resume(user_id)
+    if resume is None or not resume.extracted_text.strip():
+        return None, NO_RESUME_NOTE
+
+    opportunity = await Opportunity.get(application.opportunity_id)
+    company = await Company.get(opportunity.company_id)
+    requirements = opportunity.requirements or OpportunityRequirements()
+
+    try:
+        result, _execution = await run_resume_tailor(
+            user_id,
+            str(opportunity.id),
+            resume.extracted_text,
+            opportunity.role,
+            company.name if company else "the company",
+            requirements,
+            skill_gap,
+        )
+    except Exception as e:
+        # Already logged via AgentExecution (including fabrication-guard rejections).
+        return None, f"Tailored resume could not be generated: {e}"
+
+    tailored = await TailoredResume.find_one(TailoredResume.application_id == application.id)
+    if tailored is None:
+        tailored = TailoredResume(
+            application_id=application.id,
+            user_id=application.user_id,
+            base_document_id=resume.id,
+            **result.model_dump(),
+        )
+        await tailored.insert()
+    else:
+        for field, value in result.model_dump().items():
+            setattr(tailored, field, value)
+        tailored.base_document_id = resume.id
+        tailored.generated_at = datetime.now(timezone.utc)
+        await tailored.save()
+
+    # Re-fetched: the pipeline's earlier nodes saved this document after the caller loaded it.
+    application = await Application.get(application.id)
+    if not application.status_history or application.status_history[-1].stage != ApplicationStage.READY_TO_APPLY:
+        application.status_history.append(
+            ApplicationStatusEvent(
+                stage=ApplicationStage.READY_TO_APPLY,
+                note="Tailored resume ready — review it before anything is sent.",
+            )
+        )
+        await application.save()
+    return tailored, None
 
 
 async def _resume_tailor_node(state: PipelineState) -> PipelineState:
@@ -311,63 +381,13 @@ async def _resume_tailor_node(state: PipelineState) -> PipelineState:
 
     application = await Application.get(PydanticObjectId(state["application_id"]))
     if any(e.stage in REVIEW_DECIDED_STAGES for e in application.status_history):
-        # The user already decided on this posting (applied/skipped). Re-ingesting the
-        # same posting (e.g. it reappears in tomorrow's alert digest) must never reopen
-        # review — that's how a second application email would get sent.
         return state
 
-    resume = await _latest_resume(state["user_id"])
-    if resume is None or not resume.extracted_text.strip():
-        state["resume_tailor_note"] = (
-            "No resume on file — a tailored resume could not be generated. "
-            "Upload a resume to enable reviewing and applying."
-        )
-        return state
-
-    opportunity = await Opportunity.get(PydanticObjectId(state["opportunity_id"]))
-    company = await Company.get(opportunity.company_id)
-    requirements = opportunity.requirements or OpportunityRequirements()
-
-    try:
-        result, _execution = await run_resume_tailor(
-            state["user_id"],
-            state["opportunity_id"],
-            resume.extracted_text,
-            opportunity.role,
-            company.name if company else "the company",
-            requirements,
-            state.get("skill_gap"),
-        )
-    except Exception as e:
-        # Degrades this step only — the eligibility/skill-gap/plan results above are
-        # still valid and already saved. Already logged via AgentExecution.
-        state["resume_tailor_note"] = f"Tailored resume could not be generated: {e}"
-        return state
-
-    tailored = await TailoredResume.find_one(TailoredResume.application_id == application.id)
-    if tailored is None:
-        tailored = TailoredResume(
-            application_id=application.id,
-            user_id=PydanticObjectId(state["user_id"]),
-            base_document_id=resume.id,
-            **result.model_dump(),
-        )
-        await tailored.insert()
+    tailored, note = await tailor_application(application, state.get("skill_gap"))
+    if tailored is not None:
+        state["tailored_resume"] = tailored
     else:
-        for field, value in result.model_dump().items():
-            setattr(tailored, field, value)
-        tailored.base_document_id = resume.id
-        tailored.generated_at = datetime.now(timezone.utc)
-        await tailored.save()
-    state["tailored_resume"] = tailored
-
-    application.status_history.append(
-        ApplicationStatusEvent(
-            stage=ApplicationStage.READY_TO_APPLY,
-            note="Tailored resume ready — review it before anything is sent.",
-        )
-    )
-    await application.save()
+        state["resume_tailor_note"] = note
     return state
 
 

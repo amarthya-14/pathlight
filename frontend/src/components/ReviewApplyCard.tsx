@@ -1,12 +1,33 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ExternalLink, Mail, Send, SkipForward, Sparkles, TriangleAlert } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { Check, ClipboardCopy, Download, ExternalLink, Mail, Send, SkipForward, Sparkles, TriangleAlert } from "lucide-react";
+import { api, ApiError, saveBlob } from "@/lib/api";
 import { diffLines } from "@/lib/diff";
 import type { ApplicationOut, ReviewResponse, TailoredResumeOut } from "@/lib/types";
 import { ConfidenceBar } from "./ConfidenceBar";
 import { Button } from "./ui";
+
+export function applySiteLabel(url: string | null): string {
+  if (!url) return "the posting site";
+  try {
+    const host = new URL(url).hostname;
+    if (host.includes("linkedin.")) return "LinkedIn";
+    if (host.includes("naukri.")) return "Naukri";
+    return host.replace(/^www\./, "");
+  } catch {
+    return "the posting site";
+  }
+}
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // Gate 10 human review gate (docs/AUTONOMOUS_APPLICATIONS.md §8). Shows exactly what
 // would be sent — the resume diff, the cover note, the destination — and never advances
@@ -32,6 +53,28 @@ export function ReviewApplyCard({
   const changedCount = lines?.filter((l) => l.type !== "same").length ?? 0;
   const visibleLines = lines && onlyChanges ? lines.filter((l) => l.type !== "same") : lines;
 
+  // Assisted apply (no apply_email, but a posting link): one click opens the posting,
+  // copies the cover note, downloads the tailored PDF, and records the approval. The
+  // final Submit happens on the site itself — no bot drives the user's account there.
+  const site = applySiteLabel(application.application_url);
+  const assistedApply = async () => {
+    // window.open must run synchronously inside the click, or popup blockers eat it.
+    window.open(application.application_url!, "_blank", "noopener,noreferrer");
+    const copied = copyText(tailored.cover_note);
+    setSubmitting("approve");
+    setError(null);
+    try {
+      const { blob, filename } = await api.downloadTailoredResumePdf(application.id);
+      saveBlob(blob, filename);
+      await copied;
+      onReviewed(await api.reviewApplication(application.id, true));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Something went wrong preparing your application");
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
   const submit = async (approve: boolean) => {
     setSubmitting(approve ? "approve" : "skip");
     setError(null);
@@ -46,8 +89,9 @@ export function ReviewApplyCard({
   };
 
   const onApproveClick = () => {
-    // Manual-apply approvals send nothing, so they don't need the extra confirm step.
+    // Only a real send needs the extra confirm step — the other paths send nothing.
     if (application.apply_email) setConfirming(true);
+    else if (application.application_url) assistedApply();
     else submit(true);
   };
 
@@ -65,8 +109,13 @@ export function ReviewApplyCard({
                 Approving emails it to <span className="font-medium text-slate-700">{application.apply_email}</span>{" "}
                 from your connected Gmail.
               </>
+            ) : application.application_url ? (
+              <>
+                One click opens the job on {site}, downloads this resume as a PDF and copies the cover note — you
+                just upload, paste and press Submit there.
+              </>
             ) : (
-              "This posting has no application email, so you'll apply through its link."
+              "This posting has no application email or link, so you'll apply through the original source."
             )}
           </p>
         </div>
@@ -162,13 +211,94 @@ export function ReviewApplyCard({
         <div className="flex flex-wrap gap-2">
           <Button onClick={onApproveClick} disabled={submitting !== null}>
             {application.apply_email ? <Send size={15} /> : <ExternalLink size={15} />}
-            {application.apply_email ? "Approve & send" : submitting === "approve" ? "Saving…" : "Approve — I'll apply manually"}
+            {application.apply_email
+              ? "Approve & send"
+              : submitting === "approve"
+                ? "Preparing…"
+                : application.application_url
+                  ? `Apply on ${site}`
+                  : "Approve — I'll apply manually"}
           </Button>
           <Button variant="secondary" onClick={() => submit(false)} disabled={submitting !== null}>
             <SkipForward size={15} /> {submitting === "skip" ? "Skipping…" : "Skip"}
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+// Shown after an assisted-apply approval (MANUAL_APPLY_REQUIRED): everything needed to
+// finish on the posting site, plus the one honest way to reach APPLIED — the user saying so.
+export function FinishApplyPanel({
+  application,
+  tailored,
+  onMarked,
+}: {
+  application: ApplicationOut;
+  tailored: TailoredResumeOut | null;
+  onMarked: (application: ApplicationOut) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const site = applySiteLabel(application.application_url);
+
+  const onCopy = async () => setCopied(await copyText(tailored?.cover_note ?? ""));
+  const onDownload = async () => {
+    setError(null);
+    try {
+      const { blob, filename } = await api.downloadTailoredResumePdf(application.id);
+      saveBlob(blob, filename);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Download failed");
+    }
+  };
+  const onMark = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      onMarked(await api.markApplied(application.id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Could not update status");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card-shadow space-y-4 rounded-2xl border border-amber-200 bg-amber-50/60 p-5">
+      <div>
+        <div className="text-sm font-semibold text-amber-900">Finish applying on {site}</div>
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-amber-900/80">
+          <li>On the {site} job page, click Apply.</li>
+          <li>Upload the tailored resume PDF (it should be in your Downloads).</li>
+          <li>Paste the cover note if there&apos;s a message or cover letter field.</li>
+          <li>Submit there, then come back and confirm below.</li>
+        </ol>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {application.application_url && (
+          <a
+            href={application.application_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            <ExternalLink size={15} /> Open job on {site}
+          </a>
+        )}
+        <Button variant="secondary" onClick={onDownload} disabled={!tailored}>
+          <Download size={15} /> Resume PDF
+        </Button>
+        <Button variant="secondary" onClick={onCopy} disabled={!tailored}>
+          {copied ? <Check size={15} /> : <ClipboardCopy size={15} />} {copied ? "Copied" : "Copy cover note"}
+        </Button>
+      </div>
+      {error && <p className="text-sm font-medium text-rose-600">{error}</p>}
+      <Button onClick={onMark} disabled={busy}>
+        <Check size={15} /> {busy ? "Saving…" : `I've submitted it on ${site}`}
+      </Button>
     </div>
   );
 }

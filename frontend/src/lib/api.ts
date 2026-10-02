@@ -1,6 +1,7 @@
 import type {
   ApplicationOut,
   DashboardHomeOut,
+  DocumentDetailOut,
   DocumentOut,
   GmailSyncOut,
   IngestResponse,
@@ -33,9 +34,9 @@ export function clearToken(): void {
 
 async function request<T>(
   path: string,
-  options: { method?: string; body?: unknown; formBody?: string; auth?: boolean } = {}
+  options: { method?: string; body?: unknown; formBody?: string; multipart?: FormData; auth?: boolean } = {}
 ): Promise<T> {
-  const { method = "GET", body, formBody, auth = true } = options;
+  const { method = "GET", body, formBody, multipart, auth = true } = options;
   const headers: Record<string, string> = {};
 
   if (auth) {
@@ -43,8 +44,11 @@ async function request<T>(
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
 
-  let requestBody: string | undefined;
-  if (formBody !== undefined) {
+  let requestBody: string | FormData | undefined;
+  if (multipart !== undefined) {
+    // No Content-Type header: the browser sets multipart/form-data with the boundary.
+    requestBody = multipart;
+  } else if (formBody !== undefined) {
     headers["Content-Type"] = "application/x-www-form-urlencoded";
     requestBody = formBody;
   } else if (body !== undefined) {
@@ -67,6 +71,28 @@ async function request<T>(
 
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+async function requestFile(path: string): Promise<{ blob: Blob; filename: string }> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new ApiError(res.status, res.statusText || "Download failed");
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "resume.pdf";
+  return { blob: await res.blob(), filename };
+}
+
+export function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export const api = {
@@ -92,6 +118,12 @@ export const api = {
   listDocuments: () => request<DocumentOut[]>("/api/documents"),
   pasteDocument: (payload: { doc_type: string; title: string; text: string }) =>
     request<DocumentOut>("/api/documents/paste", { method: "POST", body: payload }),
+  uploadDocument: (file: File, docType: string) => {
+    const form = new FormData();
+    form.append("doc_type", docType);
+    form.append("file", file);
+    return request<DocumentDetailOut>("/api/documents/upload", { method: "POST", multipart: form });
+  },
 
   ingestOpportunity: (payload: { raw_text: string; source?: string }) =>
     request<IngestResponse>("/api/opportunities/ingest", { method: "POST", body: payload }),
@@ -111,6 +143,12 @@ export const api = {
 
   getTailoredResume: (applicationId: string) =>
     request<TailoredResumeOut>(`/api/applications/${applicationId}/tailored-resume`),
+  tailorApplication: (applicationId: string) =>
+    request<TailoredResumeOut>(`/api/applications/${applicationId}/tailor`, { method: "POST" }),
+  downloadTailoredResumePdf: (applicationId: string) =>
+    requestFile(`/api/applications/${applicationId}/tailored-resume.pdf`),
+  markApplied: (applicationId: string) =>
+    request<ApplicationOut>(`/api/applications/${applicationId}/mark-applied`, { method: "POST" }),
   reviewApplication: (applicationId: string, approve: boolean) =>
     request<ReviewResponse>(`/api/applications/${applicationId}/review`, { method: "POST", body: { approve } }),
 

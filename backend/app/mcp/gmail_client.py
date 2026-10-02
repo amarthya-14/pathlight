@@ -9,6 +9,7 @@ Retry policy differs deliberately between reads and the send:
   user, who can choose to approve again.
 """
 import asyncio
+import base64
 import json
 from contextlib import asynccontextmanager
 
@@ -76,7 +77,13 @@ async def mcp_get_message(user_id: str, message_id: str) -> dict:
 
 
 async def mcp_send_application_email(
-    user_id: str, to: str, subject: str, body_text: str, attachment_filename: str, attachment_text: str
+    user_id: str,
+    to: str,
+    subject: str,
+    body_text: str,
+    attachment_filename: str,
+    attachment_bytes: bytes,
+    attachment_mime: str = "application/pdf",
 ) -> dict:
     """Sends an application email. Only the human review route may call this."""
     return await _call(
@@ -87,7 +94,8 @@ async def mcp_send_application_email(
             "subject": subject,
             "body_text": body_text,
             "attachment_filename": attachment_filename,
-            "attachment_text": attachment_text,
+            "attachment_b64": base64.b64encode(attachment_bytes).decode(),
+            "attachment_mime": attachment_mime,
         },
         SEND_TIMEOUT_SECONDS,
     )

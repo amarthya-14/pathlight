@@ -76,7 +76,7 @@ async def test_send_builds_mime_with_resume_attachment(client, monkeypatch):
     await connect_gmail(user_id)
 
     sent = await mcp_send_application_email(
-        user_id, "jobs@acme.dev", "Application for Backend Intern", "Dear Hiring Team, ...", "Resume.txt", "My resume"
+        user_id, "jobs@acme.dev", "Application for Backend Intern", "Dear Hiring Team, ...", "Resume.pdf", b"%PDF-1.4 fake"
     )
     assert sent["id"] == "sent-123"
     assert len(google.sent) == 1
@@ -87,8 +87,9 @@ async def test_send_builds_mime_with_resume_attachment(client, monkeypatch):
     assert parsed["From"] is None  # Gmail sets it to the authenticated account
     parts = list(parsed.iter_parts())
     assert "Dear Hiring Team" in parts[0].get_content()
-    assert parts[1].get_filename() == "Resume.txt"
-    assert parts[1].get_content() == "My resume"
+    assert parts[1].get_filename() == "Resume.pdf"
+    assert parts[1].get_content_type() == "application/pdf"
+    assert parts[1].get_content() == b"%PDF-1.4 fake"
 
 
 async def test_send_is_never_retried(client, monkeypatch):
@@ -100,7 +101,7 @@ async def test_send_is_never_retried(client, monkeypatch):
     await connect_gmail(user_id)
 
     with pytest.raises(Exception):
-        await mcp_send_application_email(user_id, "jobs@acme.dev", "s", "b", "r.txt", "r")
+        await mcp_send_application_email(user_id, "jobs@acme.dev", "s", "b", "r.pdf", b"r")
     assert len(google.sent) == 1
 
 

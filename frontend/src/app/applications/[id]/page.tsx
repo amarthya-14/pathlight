@@ -3,15 +3,15 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, Calendar, CheckCircle2, ExternalLink, Inbox, SkipForward } from "lucide-react";
+import { ArrowRight, Calendar, CheckCircle2, ExternalLink, Inbox, SkipForward, Sparkles } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth-context";
 import { api, ApiError } from "@/lib/api";
 import type { ApplicationOut, ReviewResponse, TailoredResumeOut } from "@/lib/types";
 import { EligibilityCard } from "@/components/EligibilityCard";
-import { ReviewApplyCard } from "@/components/ReviewApplyCard";
+import { FinishApplyPanel, ReviewApplyCard } from "@/components/ReviewApplyCard";
 import { SkillGapCard } from "@/components/SkillGapCard";
 import { StatusTimeline } from "@/components/StatusTimeline";
-import { SectionLabel } from "@/components/ui";
+import { Button, SectionLabel } from "@/components/ui";
 
 export default function ApplicationDetailPage() {
   const { user, loading: authLoading } = useRequireAuth();
@@ -30,7 +30,23 @@ export default function ApplicationDetailPage() {
     api.getTailoredResume(params.id).then(setTailored).catch(() => setTailored(null));
   }, [user, params.id]);
 
+  const [tailoring, setTailoring] = useState(false);
+  const [tailorError, setTailorError] = useState<string | null>(null);
+
   const onReviewed = (response: ReviewResponse) => setApplication(response.application);
+
+  const onGenerateTailored = async () => {
+    setTailoring(true);
+    setTailorError(null);
+    try {
+      setTailored(await api.tailorApplication(params.id));
+      setApplication(await api.getApplication(params.id));
+    } catch (err) {
+      setTailorError(err instanceof ApiError ? err.detail : "Could not generate a tailored resume");
+    } finally {
+      setTailoring(false);
+    }
+  };
 
   if (authLoading || !user) return null;
   if (error) return <p className="text-sm font-medium text-rose-600">{error}</p>;
@@ -44,6 +60,11 @@ export default function ApplicationDetailPage() {
 
   const lastStage = application.status_history.at(-1)?.stage;
   const lastNote = application.status_history.at(-1)?.note;
+  const decided = application.status_history.some((e) =>
+    ["APPLIED", "MANUAL_APPLY_REQUIRED", "SKIPPED_BY_USER"].includes(e.stage)
+  );
+  const notEligible = application.eligibility?.decision === "not_eligible";
+  const showGetReady = !decided && !notEligible && !(lastStage === "READY_TO_APPLY" && tailored);
 
   return (
     <div className="animate-fade-in space-y-10">
@@ -61,12 +82,24 @@ export default function ApplicationDetailPage() {
             <Calendar size={14} /> Deadline: {new Date(application.deadline).toLocaleString()}
           </p>
         )}
-        <Link
-          href={`/applications/${application.id}/preparation`}
-          className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
-        >
-          View preparation plan <ArrowRight size={14} />
-        </Link>
+        <div className="mt-3 flex flex-wrap gap-5">
+          <Link
+            href={`/applications/${application.id}/preparation`}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+          >
+            View preparation plan <ArrowRight size={14} />
+          </Link>
+          {application.application_url && (
+            <a
+              href={application.application_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900"
+            >
+              Open original posting <ExternalLink size={14} />
+            </a>
+          )}
+        </div>
       </div>
 
       {lastStage === "READY_TO_APPLY" && tailored && (
@@ -76,25 +109,48 @@ export default function ApplicationDetailPage() {
         </section>
       )}
 
+      {showGetReady && (
+        <section>
+          <SectionLabel>Apply</SectionLabel>
+          <div className="card-shadow space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+              <Sparkles size={16} className="text-indigo-500" /> Get ready to apply
+            </div>
+            <p className="text-sm text-slate-500">
+              Pathlight tailors your resume and writes a cover note for this role — rewording and reordering what&apos;s
+              already on your resume, never adding skills you don&apos;t have. You review everything before anything
+              is sent.{" "}
+              {application.apply_email
+                ? `Approving will email it to ${application.apply_email}.`
+                : "This posting has no application email, so after approving you'll apply through the posting link."}
+            </p>
+            {tailorError && (
+              <p className="text-sm font-medium text-rose-600">
+                {tailorError}{" "}
+                {tailorError.includes("resume") && (
+                  <Link href="/profile" className="font-semibold underline">
+                    Go to Profile
+                  </Link>
+                )}
+              </p>
+            )}
+            <Button onClick={onGenerateTailored} disabled={tailoring}>
+              <Sparkles size={15} /> {tailoring ? "Tailoring your resume… (up to a minute)" : "Generate tailored resume"}
+            </Button>
+          </div>
+        </section>
+      )}
+
       {lastStage === "APPLIED" && (
         <div className="flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
           <CheckCircle2 size={16} /> {lastNote ?? "Applied."}
         </div>
       )}
       {lastStage === "MANUAL_APPLY_REQUIRED" && (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
-          {lastNote}
-          {application.application_url && (
-            <a
-              href={application.application_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-semibold text-amber-900 underline"
-            >
-              Open posting <ExternalLink size={13} />
-            </a>
-          )}
-        </div>
+        <section>
+          <SectionLabel>Apply</SectionLabel>
+          <FinishApplyPanel application={application} tailored={tailored} onMarked={setApplication} />
+        </section>
       )}
       {lastStage === "SKIPPED_BY_USER" && (
         <div className="flex items-center gap-2 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-600">

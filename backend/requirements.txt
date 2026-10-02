@@ -63,3 +63,9 @@ chromadb==1.5.9
 #   pip uninstall bcrypt -y && pip install bcrypt==4.0.1 --force-reinstall --no-deps
 # Installing this whole requirements.txt fresh in one pip command (not incrementally)
 # should avoid this, but it's worth knowing the failure mode if it recurs.
+
+fpdf2==2.8.9
+# ^ Gate 10: renders the tailored resume as a PDF (email attachment + "Apply on LinkedIn"
+# download — LinkedIn's upload accepts PDF/DOCX, not .txt). Pure Python. Its core fonts are
+# Latin-1 only, so app/assets/fonts/ vendors DejaVu Sans (free license, see LICENSE_DEJAVU
+# there) for real-world resume text ("—", "•", "₹", accented names).

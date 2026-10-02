@@ -1,16 +1,25 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { reviewMock } = vi.hoisted(() => ({ reviewMock: vi.fn() }));
+const { reviewMock, downloadMock, markAppliedMock, saveBlobMock } = vi.hoisted(() => ({
+  reviewMock: vi.fn(),
+  downloadMock: vi.fn(),
+  markAppliedMock: vi.fn(),
+  saveBlobMock: vi.fn(),
+}));
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
-  return { ...actual, api: { reviewApplication: reviewMock } };
+  return {
+    ...actual,
+    saveBlob: saveBlobMock,
+    api: { reviewApplication: reviewMock, downloadTailoredResumePdf: downloadMock, markApplied: markAppliedMock },
+  };
 });
 
 import { ApiError } from "@/lib/api";
 import type { ApplicationOut, TailoredResumeOut } from "@/lib/types";
-import { ReviewApplyCard } from "./ReviewApplyCard";
+import { applySiteLabel, FinishApplyPanel, ReviewApplyCard } from "./ReviewApplyCard";
 
 function makeApp(overrides: Partial<ApplicationOut> = {}): ApplicationOut {
   return {
@@ -49,6 +58,9 @@ describe("ReviewApplyCard", () => {
     // Block body on purpose: a function returned from beforeEach is run as a teardown
     // hook, and mockReset() returns the mock itself.
     reviewMock.mockReset();
+    downloadMock.mockReset();
+    markAppliedMock.mockReset();
+    saveBlobMock.mockReset();
   });
 
   it("shows the diff, cover note, and warnings", () => {
@@ -98,5 +110,62 @@ describe("ReviewApplyCard", () => {
     fireEvent.click(screen.getByText("Approve & send"));
     fireEvent.click(screen.getByText("Yes, send it"));
     expect(await screen.findByText(/Connect Gmail/)).toBeInTheDocument();
+  });
+
+  it("one click on 'Apply on LinkedIn' opens the job, copies the cover note, downloads the PDF, and records approval", async () => {
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const blob = new Blob(["%PDF"]);
+    downloadMock.mockResolvedValue({ blob, filename: "Resume.pdf" });
+    reviewMock.mockResolvedValue({ outcome: "manual_apply_required" });
+    const onReviewed = vi.fn();
+    const url = "https://www.linkedin.com/jobs/view/42";
+
+    render(
+      <ReviewApplyCard
+        application={makeApp({ apply_email: null, application_url: url })}
+        tailored={TAILORED}
+        onReviewed={onReviewed}
+      />
+    );
+    fireEvent.click(screen.getByText("Apply on LinkedIn"));
+
+    expect(openSpy).toHaveBeenCalledWith(url, "_blank", "noopener,noreferrer");
+    expect(writeText).toHaveBeenCalledWith("Dear Hiring Team, hello.");
+    await waitFor(() => expect(onReviewed).toHaveBeenCalled());
+    expect(saveBlobMock).toHaveBeenCalledWith(blob, "Resume.pdf");
+    expect(reviewMock).toHaveBeenCalledWith("app1", true);
+    openSpy.mockRestore();
+  });
+});
+
+describe("applySiteLabel", () => {
+  it("names well-known job sites", () => {
+    expect(applySiteLabel("https://www.linkedin.com/comm/jobs/view/1")).toBe("LinkedIn");
+    expect(applySiteLabel("https://www.naukri.com/job-listings-x")).toBe("Naukri");
+    expect(applySiteLabel("https://careers.acme.dev/jobs/1")).toBe("careers.acme.dev");
+    expect(applySiteLabel(null)).toBe("the posting site");
+  });
+});
+
+describe("FinishApplyPanel", () => {
+  beforeEach(() => {
+    markAppliedMock.mockReset();
+  });
+
+  it("marks the application applied only when the user confirms", async () => {
+    const onMarked = vi.fn();
+    markAppliedMock.mockResolvedValue({ id: "app1" });
+    render(
+      <FinishApplyPanel
+        application={makeApp({ apply_email: null, application_url: "https://www.linkedin.com/jobs/view/42" })}
+        tailored={TAILORED}
+        onMarked={onMarked}
+      />
+    );
+    expect(markAppliedMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("I've submitted it on LinkedIn"));
+    await waitFor(() => expect(onMarked).toHaveBeenCalledWith({ id: "app1" }));
   });
 });
