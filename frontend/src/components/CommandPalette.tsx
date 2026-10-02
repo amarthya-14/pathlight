@@ -99,7 +99,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   useEffect(() => setActive(0), [query]);
 
   useEffect(() => {
-    listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
+    (listRef.current?.querySelector(`[data-index="${active}"]`) as HTMLElement | null)?.scrollIntoView?.({ block: "nearest" });
   }, [active]);
 
   if (!open) return null;
@@ -131,7 +131,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search applications, pages, actions…"
-            className="h-12 w-full bg-transparent text-[15px] text-fg placeholder:text-subtle focus:outline-none"
+            className="h-12 w-full bg-transparent text-[15px] text-fg placeholder:text-subtle focus:outline-none focus-visible:outline-none"
           />
           <kbd className="kbd">esc</kbd>
         </div>
