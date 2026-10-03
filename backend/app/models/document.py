@@ -26,6 +26,14 @@ class Document(BeanieDocument):
     storage_filename: str  # sanitized, unique name actually used on disk (see app/mcp/sandbox.py)
     content_type: str
     extracted_text: str | None = None
+    # Hyperlinks found in the file (app/core/resume_links.py), anchors already resolved
+    # into extracted_text. None = extracted before link-aware extraction existed; such a
+    # PDF is re-extracted on next use (see app/graphs/opportunity_pipeline.py::latest_resume).
+    links: list[dict] | None = None
+    # The original file's bytes (resumes up to 5MB). Free hosts wipe the uploads disk on
+    # every redeploy; MongoDB is the source of truth, so the PDF — and its hyperlinks —
+    # survive. Never returned by any API schema.
+    content: bytes | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

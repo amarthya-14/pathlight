@@ -50,6 +50,9 @@ class Opportunity(Document):
     deadline: datetime | None = None
     source: str = "manual"  # manual | gmail_mcp | ...
     requirements: OpportunityRequirements | None = None
+    # The posting's full text, as ingested (JD, alert email, or job-board listing). The
+    # Resume Tailor mirrors its wording — skills lists alone lose the phrasing ATS match on.
+    description: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

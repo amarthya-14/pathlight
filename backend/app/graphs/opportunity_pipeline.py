@@ -23,6 +23,7 @@ loop: neither is a structured-output LLM call prone to schema-validation failure
 Gap is a distance-threshold classification, Planner is pure deterministic computation),
 so a single attempt is treated as reliable enough for this MVP.
 """
+import logging
 from datetime import datetime, timezone
 from typing import Optional, TypedDict
 
@@ -37,6 +38,9 @@ from app.agents.resume_tailor import run_resume_tailor
 from app.agents.schemas import EligibilityDecision, EligibilityResult, ExtractedOpportunity, SkillGapResult
 from app.agents.skill_gap import run_skill_gap
 from app.core.dedupe import role_hash as compute_role_hash
+from app.core.resume_links import drop_dead_anchors, extract_pdf
+from app.core.usage import DAILY_LIMITS, friendly_llm_error, try_consume
+from app.mcp.sandbox import resolve_safe_path
 from app.mcp.calendar_client import mcp_create_reminder
 from app.models.application import REVIEW_DECIDED_STAGES, Application, ApplicationStage, ApplicationStatusEvent
 from app.models.document import Document, DocumentType
@@ -47,6 +51,7 @@ from app.models.user import Profile
 from app.retrieval.vector_store import user_has_indexed_resume
 
 MAX_ATTEMPTS = 2
+MAX_DESCRIPTION_CHARS = 20000
 
 
 class PipelineState(TypedDict, total=False):
@@ -64,9 +69,17 @@ class PipelineState(TypedDict, total=False):
     resume_tailor_note: Optional[str]
     error: Optional[str]
     needs_human_review: bool
+    # Interactive callers (pasting a JD) want eligibility + skill gap back in seconds; the
+    # tailor's ATS revise loop takes minutes, so they run it afterwards (tailor_in_background).
+    defer_tailor: bool
+    tailor_deferred: bool
 
 
 async def _discovery_node(state: PipelineState) -> PipelineState:
+    if state.get("extraction") is not None:
+        # Already extracted by the caller (one job out of an alert digest, or a job-board
+        # listing whose fields are structured already) — no second LLM call.
+        return state
     last_error = None
     for _ in range(MAX_ATTEMPTS):
         try:
@@ -110,6 +123,8 @@ async def _persist_opportunity_node(state: PipelineState) -> PipelineState:
         # strategy (e.g. prefer non-null fields from either version) if re-ingestion
         # from a second source with less complete data starts overwriting good data.
         opportunity.requirements = requirements
+        if len(state["raw_text"] or "") > len(opportunity.description or ""):
+            opportunity.description = state["raw_text"][:MAX_DESCRIPTION_CHARS]
         await opportunity.save()
     else:
         opportunity = Opportunity(
@@ -119,6 +134,7 @@ async def _persist_opportunity_node(state: PipelineState) -> PipelineState:
             deadline=extraction.deadline,
             source=state["source"],
             requirements=requirements,
+            description=(state["raw_text"] or "")[:MAX_DESCRIPTION_CHARS],
         )
         try:
             await opportunity.insert()
@@ -296,11 +312,36 @@ async def _planner_node(state: PipelineState) -> PipelineState:
 
 
 async def latest_resume(user_id: str) -> Document | None:
-    return await Document.find(
+    resume = await Document.find(
         Document.owner_id == PydanticObjectId(user_id),
         Document.doc_type == DocumentType.RESUME,
         Document.extracted_text != None,  # noqa: E711 — Beanie query expression, not a Python comparison
     ).sort(-Document.created_at).first_or_none()
+    if resume is not None and resume.links is None:
+        await _upgrade_extraction(resume)
+    return resume
+
+
+async def _upgrade_extraction(resume: Document) -> None:
+    """Resumes uploaded before link-aware extraction have dead anchors ("GitHub Repo")
+    in their text. Re-reads the original file once so tailoring sees the real URLs —
+    users don't have to re-upload. Best-effort: if the file is gone, keep the old text."""
+    if resume.content_type == "application/pdf":
+        raw = resume.content
+        if raw is None:
+            try:
+                raw = resolve_safe_path(str(resume.owner_id), resume.storage_filename).read_bytes()
+            except Exception:
+                raw = None
+        if raw:
+            text, links = extract_pdf(raw)
+            if text:
+                resume.extracted_text = text
+                resume.links = [link.as_dict() for link in links]
+                await resume.save()
+                return
+    resume.links = []
+    await resume.save()
 
 
 NO_RESUME_NOTE = (
@@ -326,23 +367,35 @@ async def tailor_application(application: Application, skill_gap: SkillGapResult
     if resume is None or not resume.extracted_text.strip():
         return None, NO_RESUME_NOTE
 
+    if not await try_consume(user_id, "tailor"):
+        return None, (
+            f"You've used today's {DAILY_LIMITS['tailor']} tailored resumes — use “Generate tailored resume” "
+            "tomorrow (the limit keeps Pathlight free for everyone)."
+        )
+
     opportunity = await Opportunity.get(application.opportunity_id)
     company = await Company.get(opportunity.company_id)
     requirements = opportunity.requirements or OpportunityRequirements()
 
+    base_text = resume.extracted_text
+    if resume.content_type == "application/pdf" and not resume.links:
+        # Original file (and its links) unavailable — don't carry dead link labels over.
+        base_text = drop_dead_anchors(base_text)
+
     try:
-        result, _execution = await run_resume_tailor(
+        result, ats, _execution = await run_resume_tailor(
             user_id,
             str(opportunity.id),
-            resume.extracted_text,
+            base_text,
             opportunity.role,
             company.name if company else "the company",
             requirements,
             skill_gap,
+            job_description=opportunity.description,
         )
     except Exception as e:
         # Already logged via AgentExecution (including fabrication-guard rejections).
-        return None, f"Tailored resume could not be generated: {e}"
+        return None, f"Tailored resume could not be generated: {friendly_llm_error(e)}"
 
     tailored = await TailoredResume.find_one(TailoredResume.application_id == application.id)
     if tailored is None:
@@ -350,6 +403,7 @@ async def tailor_application(application: Application, skill_gap: SkillGapResult
             application_id=application.id,
             user_id=application.user_id,
             base_document_id=resume.id,
+            ats=ats.as_dict(),
             **result.model_dump(),
         )
         await tailored.insert()
@@ -357,6 +411,7 @@ async def tailor_application(application: Application, skill_gap: SkillGapResult
         for field, value in result.model_dump().items():
             setattr(tailored, field, value)
         tailored.base_document_id = resume.id
+        tailored.ats = ats.as_dict()
         tailored.generated_at = datetime.now(timezone.utc)
         await tailored.save()
 
@@ -382,6 +437,10 @@ async def _resume_tailor_node(state: PipelineState) -> PipelineState:
 
     application = await Application.get(PydanticObjectId(state["application_id"]))
     if any(e.stage in REVIEW_DECIDED_STAGES for e in application.status_history):
+        return state
+
+    if state.get("defer_tailor"):
+        state["tailor_deferred"] = True
         return state
 
     tailored, note = await tailor_application(application, state.get("skill_gap"))
@@ -417,6 +476,7 @@ async def recheck_application(application: Application, job_description: str | N
             apply_email=extraction.apply_email or old.apply_email,
             application_url=extraction.application_url or old.application_url,
         )
+        opportunity.description = job_description.strip()[:MAX_DESCRIPTION_CHARS]
         if extraction.deadline and opportunity.deadline is None:
             opportunity.deadline = extraction.deadline
         await opportunity.save()
@@ -482,7 +542,28 @@ def get_pipeline():
     return _pipeline
 
 
-async def run_opportunity_pipeline(raw_text: str, source: str, user_id: str) -> PipelineState:
+async def tailor_in_background(application_id: str) -> None:
+    """Runs the tailor for an application after the request that created it returned.
+    Never raises (it runs detached); failures are logged as AgentExecutions already."""
+    try:
+        application = await Application.get(PydanticObjectId(application_id))
+        if application is not None:
+            await tailor_application(application, application.skill_gap)
+    except Exception:
+        logging.getLogger(__name__).exception("background tailoring failed for %s", application_id)
+
+
+async def run_opportunity_pipeline(
+    raw_text: str,
+    source: str,
+    user_id: str,
+    extraction: ExtractedOpportunity | None = None,
+    defer_tailor: bool = False,
+) -> PipelineState:
     pipeline = get_pipeline()
-    initial_state: PipelineState = {"raw_text": raw_text, "source": source, "user_id": user_id}
+    initial_state: PipelineState = {
+        "raw_text": raw_text, "source": source, "user_id": user_id, "defer_tailor": defer_tailor,
+    }
+    if extraction is not None:
+        initial_state["extraction"] = extraction
     return await pipeline.ainvoke(initial_state)

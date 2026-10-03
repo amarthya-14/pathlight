@@ -3,19 +3,20 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Briefcase, ClipboardList, LayoutDashboard, LogOut, Mail, Search, UserRound } from "lucide-react";
-import { useAuth } from "@/lib/auth-context";
+import { BarChart3, Briefcase, ClipboardList, Compass, LayoutDashboard, LogOut, Mail, Search, UserRound } from "lucide-react";
+import { initials, useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import { currentStage } from "@/lib/stages";
 import { Brand } from "./Brand";
 import { ThemeToggle } from "./ThemeToggle";
 
 export const NAV_LINKS = [
-  { href: "/dashboard", label: "Dashboard", short: "Home", icon: LayoutDashboard },
-  { href: "/opportunities", label: "Opportunities", short: "Discover", icon: Briefcase },
-  { href: "/applications", label: "Applications", short: "Apply", icon: ClipboardList },
-  { href: "/integrations", label: "Integrations", short: "Gmail", icon: Mail },
-  { href: "/profile", label: "Profile", short: "Profile", icon: UserRound },
+  { href: "/dashboard", label: "Dashboard", short: "Home", icon: LayoutDashboard, mobile: true },
+  { href: "/jobs", label: "Jobs for you", short: "Jobs", icon: Compass, mobile: true },
+  { href: "/opportunities", label: "Add a job", short: "Add", icon: Briefcase, mobile: false },
+  { href: "/applications", label: "Applications", short: "Apply", icon: ClipboardList, mobile: true },
+  { href: "/integrations", label: "Gmail alerts", short: "Gmail", icon: Mail, mobile: true },
+  { href: "/profile", label: "Profile", short: "Profile", icon: UserRound, mobile: true },
 ];
 
 export function isActive(pathname: string, href: string): boolean {
@@ -35,11 +36,48 @@ function useReviewCount(pathname: string): number {
   return count;
 }
 
+const JOBS_SEEN_KEY = "pathlight_jobs_seen_at";
+let newJobsCache: { at: number; count: number } | null = null;
+
+/** Matches posted since the student last opened Jobs — fetched at most every 10 min. */
+function useNewJobsCount(pathname: string): number {
+  const [count, setCount] = useState(newJobsCache?.count ?? 0);
+  useEffect(() => {
+    let seen = 0;
+    try {
+      if (pathname === "/jobs") window.localStorage.setItem(JOBS_SEEN_KEY, String(Date.now()));
+      seen = Number(window.localStorage.getItem(JOBS_SEEN_KEY) ?? 0);
+    } catch {
+      seen = 0;
+    }
+    if (pathname === "/jobs") {
+      newJobsCache = { at: Date.now(), count: 0 };
+      setCount(0);
+      return;
+    }
+    if (newJobsCache && Date.now() - newJobsCache.at < 10 * 60_000) {
+      setCount(newJobsCache.count);
+      return;
+    }
+    api
+      .jobFeed()
+      .then((feed) => {
+        const n = seen ? feed.items.filter((j) => j.posted_at && new Date(j.posted_at).getTime() > seen && !j.tracked_application_id).length : 0;
+        newJobsCache = { at: Date.now(), count: n };
+        setCount(n);
+      })
+      .catch(() => {});
+  }, [pathname]);
+  return count;
+}
+
 export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const reviewCount = useReviewCount(pathname);
+  const newJobs = useNewJobsCount(pathname);
+  const links = user?.is_admin ? [...NAV_LINKS, { href: "/admin", label: "Admin", short: "Admin", icon: BarChart3, mobile: false }] : NAV_LINKS;
 
   if (!user) return null;
 
@@ -62,16 +100,21 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
       </div>
 
       <nav className="mt-4 flex-1 space-y-0.5 px-3" aria-label="Main">
-        {NAV_LINKS.map((link) => {
+        {links.map((link) => {
           const active = isActive(pathname, link.href);
           const Icon = link.icon;
-          const badge = link.href === "/applications" && reviewCount > 0 ? reviewCount : null;
+          const badge =
+            link.href === "/applications" && reviewCount > 0
+              ? reviewCount
+              : link.href === "/jobs" && newJobs > 0
+                ? newJobs
+                : null;
           return (
             <Link
               key={link.href}
               href={link.href}
               aria-current={active ? "page" : undefined}
-              className={`flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors ${
+              className={`flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] font-medium transition-[background-color,color,box-shadow] duration-200 ${
                 active ? "bg-surface text-fg shadow-xs ring-1 ring-line" : "text-muted hover:bg-surface-hover hover:text-fg"
               }`}
             >
@@ -89,11 +132,11 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
 
       <div className="border-t border-line p-3">
         <div className="flex items-center gap-2.5 rounded-lg px-1.5 py-1">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-[10px] font-semibold text-ink-fg">
-            {user.email.slice(0, 2).toUpperCase()}
-          </div>
+          <Link href="/profile" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-[10px] font-semibold text-ink-fg">
+            {initials(user)}
+          </Link>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[13px] font-medium text-fg">{user.email.split("@")[0]}</div>
+            <div className="truncate text-[13px] font-medium text-fg">{user.full_name || user.email.split("@")[0]}</div>
             <div className="truncate text-[11px] text-subtle">{user.email}</div>
           </div>
           <button
@@ -147,7 +190,7 @@ export function MobileNav({ onSearch }: { onSearch: () => void }) {
         className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-line bg-bg/90 px-2 pt-1.5 backdrop-blur-xl lg:hidden"
         style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
       >
-        {NAV_LINKS.map((link) => {
+        {NAV_LINKS.filter((link) => link.mobile).map((link) => {
           const active = isActive(pathname, link.href);
           const Icon = link.icon;
           return (

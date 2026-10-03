@@ -6,10 +6,11 @@ import Link from "next/link";
 import { ArrowRight, Check } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { AuthLayout, PasswordInput } from "@/components/AuthLayout";
+import { AuthLayout, GoogleButton, PasswordInput } from "@/components/AuthLayout";
 import { Alert, Button, Field, TextInput } from "@/components/ui";
 
 export default function RegisterPage() {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -26,10 +27,10 @@ export default function RegisterPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await api.register(email, password);
+      await api.register(email, password, name);
       await api.login(email, password);
       await refresh();
-      router.push("/dashboard");
+      router.push("/welcome");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Registration failed");
     } finally {
@@ -42,7 +43,7 @@ export default function RegisterPage() {
   return (
     <AuthLayout
       title="Create your account"
-      subtitle="Free for students. Set up in under two minutes."
+      subtitle="Free for students. Takes two minutes — then jobs start finding you."
       footer={
         <>
           Already have an account?{" "}
@@ -52,7 +53,19 @@ export default function RegisterPage() {
         </>
       }
     >
+      <GoogleButton label="Sign up with Google" />
       <form onSubmit={onSubmit} className="space-y-4">
+        <Field label="Your name">
+          <TextInput
+            name="full_name"
+            required
+            autoComplete="name"
+            autoFocus
+            placeholder="Asha Rao"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </Field>
         <Field label="Email">
           <TextInput
             type="email"
@@ -81,6 +94,11 @@ export default function RegisterPage() {
           {submitting ? "Creating account…" : "Create account"}
           {!submitting && <ArrowRight size={17} />}
         </Button>
+        <p className="text-center text-xs leading-relaxed text-subtle">
+          By creating an account you agree to the{" "}
+          <Link href="/terms" className="underline underline-offset-2 hover:text-fg">Terms</Link> and{" "}
+          <Link href="/privacy" className="underline underline-offset-2 hover:text-fg">Privacy Policy</Link>.
+        </p>
       </form>
     </AuthLayout>
   );

@@ -33,6 +33,12 @@ class Integration(Document):
     # Gmail message IDs already fed into the pipeline — last_polled_at alone isn't enough,
     # because Gmail's `after:` search operator has day-level granularity in practice.
     processed_message_ids: list[str] = Field(default_factory=list)
+    # Manual "Check now" runs in the background (it can take minutes: every job in every
+    # alert goes through the full pipeline). Its progress lives here, not in memory, so a
+    # page reload — or a second server process — still sees it.
+    sync_state: str = "idle"  # idle | running | done | error
+    sync_started_at: datetime | None = None
+    last_sync_result: dict | None = None
     connected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

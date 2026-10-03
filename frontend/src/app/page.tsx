@@ -23,25 +23,31 @@ import { useAuth } from "@/lib/auth-context";
 import { Brand, BrandMark } from "@/components/Brand";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Badge, buttonClasses, CompanyAvatar } from "@/components/ui";
+import { Reveal, ScoreRing, WordRise } from "@/components/Motion";
 
 // Public landing page — what a friend sees when you share the link. Signed-in users
 // see the same page with "Open dashboard" in place of the sign-up calls to action.
 
 const STEPS = [
-  { icon: Inbox, title: "Discover", text: "Reads LinkedIn & Naukri job alerts from your Gmail — or paste any job description." },
+  { icon: Inbox, title: "Discover", text: "Searches 25+ company career pages and job boards daily, plus your LinkedIn & Naukri alerts." },
   { icon: BadgeCheck, title: "Check eligibility", text: "CGPA, branch and experience checked with evidence. Unclear? It says so." },
   { icon: ScanSearch, title: "Find skill gaps", text: "Your resume and GitHub against the role: matched, weak, missing." },
-  { icon: Wand2, title: "Tailor", text: "A resume and cover note for this role — reworded, never invented." },
+  { icon: Wand2, title: "Tailor", text: "An ATS-ready resume and cover note — reworded, never invented, links intact." },
   { icon: MousePointerClick, title: "You approve", text: "Nothing goes out until you say so. Then it's one click." },
 ];
 
 const FEATURES = [
-  { icon: Inbox, title: "Opportunities find you", text: "Connect Gmail once. Every job alert is parsed, de-duplicated and lined up for review." },
+  { icon: Inbox, title: "Opportunities find you", text: "Fresh roles from company career pages and job boards every day, ranked for your skills, level and cities — plus every Gmail job alert." },
   { icon: BadgeCheck, title: "Honest eligibility", text: "Hard checks on CGPA, branch and years of experience — and \"uncertain\" when the posting doesn't say." },
   { icon: ScanSearch, title: "Real skill gaps", text: "Semantic matching against your actual resume, corroborated by your public GitHub repos." },
-  { icon: Wand2, title: "Tailoring with a guardrail", text: "A code-level check rejects any tailored resume that claims a skill you don't have." },
+  { icon: Wand2, title: "ATS-ready, honestly", text: "Every tailored resume is scored like an ATS would and revised until it hits the best score you can honestly get." },
   { icon: BookOpenCheck, title: "Prep plans that fit", text: "Missing skills become an ordered checklist with hours estimated against the deadline." },
   { icon: MousePointerClick, title: "Apply in one click", text: "Email applications sent from your Gmail, or the posting opened with your PDF ready." },
+];
+
+const SOURCES = [
+  "Groww", "Meesho", "CRED", "Paytm", "Databricks", "MongoDB", "Stripe", "HackerRank", "Druva", "InMobi",
+  "Okta", "Zscaler", "GitLab", "Rubrik", "Twilio", "Coinbase", "Remotive", "Himalayas", "LinkedIn alerts", "Naukri alerts",
 ];
 
 const FAQ = [
@@ -52,6 +58,14 @@ const FAQ = [
   {
     q: "Will it make my resume sound better than I am?",
     a: "It rewords and reorders what's already on your resume. If a role asks for a skill you don't have, you get a warning — the skill is never added. This is enforced in code, not just requested of the AI.",
+  },
+  {
+    q: "Will my resume score 100 on an ATS?",
+    a: "If you have every skill the job asks for, yes — Pathlight mirrors the posting's wording, fixes structure and keeps your links clickable, then re-checks until nothing honest is left to gain. If the job wants something you don't have, it tells you exactly which skills cost those points instead of faking them.",
+  },
+  {
+    q: "Where do the jobs come from?",
+    a: "Public job boards of companies like Groww, Meesho, CRED, Paytm, Databricks and MongoDB, remote boards like Remotive and Himalayas, and your own LinkedIn and Naukri alert emails if you connect Gmail. Each links to the original posting.",
   },
   {
     q: "What does it read in my Gmail?",
@@ -65,7 +79,7 @@ const FAQ = [
 
 function ProductWindow() {
   return (
-    <div className="card overflow-hidden rounded-2xl shadow-card-lg">
+    <div className="hero-window card overflow-hidden rounded-2xl shadow-card-lg">
       <div className="flex items-center gap-1.5 border-b border-line bg-surface-2 px-4 py-2.5">
         <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
         <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
@@ -80,7 +94,7 @@ function ProductWindow() {
             <BrandMark size={20} />
             <span className="text-[13px] font-semibold text-fg">Pathlight</span>
           </div>
-          {["Dashboard", "Opportunities", "Applications", "Integrations", "Profile"].map((l) => (
+          {["Dashboard", "Jobs for you", "Applications", "Gmail alerts", "Profile"].map((l) => (
             <div
               key={l}
               className={`mb-0.5 flex h-7 items-center justify-between rounded-md px-2 text-[12px] ${
@@ -101,9 +115,12 @@ function ProductWindow() {
                 <div className="text-[13px] text-muted">Aptora Labs · Hyderabad</div>
               </div>
             </div>
-            <div className="flex gap-1.5">
-              <Badge tone="ok" dot>Eligible</Badge>
-              <Badge tone="neutral" icon={Inbox}>From Gmail</Badge>
+            <div className="flex items-center gap-3">
+              <div className="flex gap-1.5">
+                <Badge tone="ok" dot>Eligible</Badge>
+                <Badge tone="neutral" icon={Inbox}>From Gmail</Badge>
+              </div>
+              <ScoreRing value={96} size={46} stroke={4} tone="ok" />
             </div>
           </div>
 
@@ -113,12 +130,12 @@ function ProductWindow() {
                 <span className="flex items-center gap-1.5"><FileText size={12} /> Tailored resume</span>
                 <span>3 changes</span>
               </div>
-              <div className="space-y-1 font-mono text-[11px] leading-relaxed">
+              <Reveal sequence className="space-y-1 font-mono text-[11px] leading-relaxed">
                 <div className="text-muted">  Java, Spring Boot, REST APIs, SQL</div>
                 <div className="rounded bg-bad-soft px-1.5 text-bad line-through decoration-bad/40">− Built REST endpoints for order tracking</div>
                 <div className="rounded bg-ok-soft px-1.5 text-ok">+ Built Spring Boot REST APIs for order tracking</div>
                 <div className="text-muted">  Campus Events — used by 600 students</div>
-              </div>
+              </Reveal>
             </div>
             <div className="rounded-lg border border-line bg-surface-2 p-3">
               <div className="mb-2 flex items-center gap-1.5 text-[11px] text-subtle">
@@ -184,27 +201,27 @@ export default function LandingPage() {
       <section className="relative">
         <div className="dot-field pointer-events-none absolute inset-0 opacity-70" aria-hidden />
         <div className="relative mx-auto max-w-4xl px-5 pb-16 pt-20 text-center sm:pt-28">
-          <div className="stagger">
-            <div className="flex justify-center">
+          <div>
+            <div className="animate-fade-in flex justify-center">
               <Link
                 href={cta.href}
                 className="inline-flex items-center gap-2 rounded-full border border-line bg-surface py-1 pl-1.5 pr-3 text-[13px] text-muted shadow-xs transition-colors hover:border-line-strong"
               >
                 <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent-fg">New</span>
-                Built for campus placements
+                Jobs from 25+ company career pages, daily
                 <ArrowRight size={13} />
               </Link>
             </div>
-            <h1 className="mt-8 text-[2.7rem] font-semibold leading-[1.02] tracking-[-0.045em] text-fg sm:text-[4.6rem]">
-              Your placement season,
+            <h1 className="mt-8 text-[2.7rem] font-semibold leading-[1.04] tracking-[-0.045em] text-fg sm:text-[4.6rem]">
+              <WordRise text="Your placement season," />
               <br />
-              <span className="font-display text-[1.12em] font-normal italic tracking-[-0.02em]">on autopilot.</span>
+              <WordRise text="on autopilot." start={3} className="font-display text-[1.12em] font-normal italic tracking-[-0.02em]" />
             </h1>
-            <p className="mx-auto mt-7 max-w-xl text-base leading-relaxed text-muted sm:text-[1.07rem]">
-              Pathlight reads your job alerts, checks your eligibility, finds your skill gaps and tailors your resume for
-              every role — then applies only when you say so.
+            <p className="animate-fade-up mx-auto mt-7 max-w-xl text-base leading-relaxed text-muted sm:text-[1.07rem]" style={{ animationDelay: "0.45s" }}>
+              Pathlight finds jobs that fit you, checks your eligibility, and tailors an ATS-ready resume for every role
+              — without inventing a single skill. It applies only when you say so.
             </p>
-            <div className="mt-9 flex flex-col items-center justify-center gap-2.5 sm:flex-row">
+            <div className="animate-fade-up mt-9 flex flex-col items-center justify-center gap-2.5 sm:flex-row" style={{ animationDelay: "0.55s" }}>
               <Link href={cta.href} className={buttonClasses("primary", "lg", "w-full px-5 sm:w-auto")}>
                 {cta.label} <ArrowRight size={15} />
               </Link>
@@ -212,8 +229,8 @@ export default function LandingPage() {
                 See how it works
               </a>
             </div>
-            <div className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 text-[13px] text-subtle">
-              {["Never invents skills", "You approve every application", "Encrypted Gmail access"].map((t) => (
+            <div className="animate-fade-up mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 text-[13px] text-subtle" style={{ animationDelay: "0.65s" }}>
+              {["Never invents skills", "ATS-scored resumes", "You approve every application"].map((t) => (
                 <span key={t} className="inline-flex items-center gap-1.5">
                   <Check size={13} className="text-ok" strokeWidth={2.5} /> {t}
                 </span>
@@ -221,32 +238,44 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
-        <div className="animate-fade-up relative mx-auto max-w-5xl px-5 pb-24" style={{ animationDelay: "0.2s" }}>
+        <div className="relative mx-auto max-w-5xl px-5 pb-16 [perspective:1600px]">
           <ProductWindow />
+        </div>
+        <div className="relative mx-auto max-w-5xl px-5 pb-20">
+          <p className="text-center text-[12px] font-medium uppercase tracking-[0.14em] text-subtle">Jobs straight from the source</p>
+          <div className="marquee mt-5 overflow-hidden">
+            <div className="marquee-track flex w-max gap-12 pr-12">
+              {[...SOURCES, ...SOURCES].map((name, i) => (
+                <span key={i} className="whitespace-nowrap text-[17px] font-semibold tracking-[-0.02em] text-subtle/90">
+                  {name}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
       {/* How it works */}
       <section id="how" className="scroll-mt-16 border-t border-line bg-bg-subtle">
         <div className="mx-auto max-w-6xl px-5 py-24">
-          <div className="max-w-2xl">
+          <Reveal className="max-w-2xl">
             <div className="text-[13px] font-medium text-subtle">How it works</div>
             <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-fg sm:text-[2.6rem] sm:leading-[1.1]">
-              From job alert to application, <span className="font-display font-normal italic">in five steps.</span>
+              From job post to application, <span className="font-display font-normal italic">in five steps.</span>
             </h2>
-          </div>
+          </Reveal>
           <ol className="mt-14 grid gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-5">
             {STEPS.map((step, i) => {
               const Icon = step.icon;
               return (
-                <li key={step.title} className="bg-surface p-6">
+                <Reveal as="li" key={step.title} delay={i * 90} className="bg-surface p-6">
                   <div className="flex items-center justify-between">
                     <Icon size={18} className="text-fg" strokeWidth={1.8} />
                     <span className="font-mono text-[11px] text-subtle">0{i + 1}</span>
                   </div>
                   <div className="mt-8 text-[15px] font-semibold text-fg">{step.title}</div>
                   <p className="mt-1.5 text-[13px] leading-relaxed text-muted">{step.text}</p>
-                </li>
+                </Reveal>
               );
             })}
           </ol>
@@ -257,22 +286,22 @@ export default function LandingPage() {
       <section id="features" className="scroll-mt-16 border-t border-line">
         <div className="mx-auto max-w-6xl px-5 py-24">
           <div className="grid gap-10 lg:grid-cols-[1fr_2fr]">
-            <div>
+            <Reveal>
               <div className="text-[13px] font-medium text-subtle">Features</div>
               <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-fg sm:text-[2.6rem] sm:leading-[1.1]">
                 Everything placement season needs.
               </h2>
               <p className="mt-4 max-w-sm leading-relaxed text-muted">
-                Five specialised agents, each doing one job well — and showing its work every time.
+                Specialised agents, each doing one job well — and showing its work every time.
               </p>
-            </div>
+            </Reveal>
             <div className="grid gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-2">
-              {FEATURES.map(({ icon: Icon, title, text }) => (
-                <div key={title} className="bg-surface p-6 transition-colors hover:bg-surface-2">
-                  <Icon size={18} className="text-fg" strokeWidth={1.8} />
+              {FEATURES.map(({ icon: Icon, title, text }, i) => (
+                <Reveal key={title} delay={(i % 2) * 80 + Math.floor(i / 2) * 60} className="group bg-surface p-6 transition-colors duration-300 hover:bg-surface-2">
+                  <Icon size={18} className="text-fg transition-transform duration-500 group-hover:-translate-y-0.5" strokeWidth={1.8} />
                   <h3 className="mt-5 text-[15px] font-semibold text-fg">{title}</h3>
                   <p className="mt-1.5 text-[13px] leading-relaxed text-muted">{text}</p>
-                </div>
+                </Reveal>
               ))}
             </div>
           </div>
@@ -283,9 +312,9 @@ export default function LandingPage() {
       <section className="border-t border-line bg-bg-subtle">
         <div className="mx-auto max-w-4xl px-5 py-24 text-center">
           <Sparkles size={20} className="mx-auto text-subtle" strokeWidth={1.6} />
-          <p className="mt-6 font-display text-[2rem] leading-[1.2] tracking-[-0.01em] text-fg sm:text-[2.9rem]">
+          <Reveal as="p" className="mt-6 font-display text-[2rem] leading-[1.2] tracking-[-0.01em] text-fg sm:text-[2.9rem]">
             “An assistant that handles the busywork of placement season — and never embellishes who you are.”
-          </p>
+          </Reveal>
           <div className="mx-auto mt-12 grid max-w-3xl gap-6 text-left sm:grid-cols-3">
             {[
               { icon: ShieldCheck, t: "Never fabricates", d: "Claimed skills are checked against your original resume." },
@@ -328,13 +357,13 @@ export default function LandingPage() {
       {/* CTA */}
       <section className="border-t border-line">
         <div className="mx-auto max-w-3xl px-5 py-28 text-center">
-          <h2 className="text-4xl font-semibold tracking-[-0.04em] text-fg sm:text-6xl">
+          <Reveal as="h2" className="text-4xl font-semibold tracking-[-0.04em] text-fg sm:text-6xl">
             Stop refreshing job boards.
             <br />
             <span className="font-display font-normal italic">Start getting shortlisted.</span>
-          </h2>
+          </Reveal>
           <p className="mx-auto mt-6 max-w-md text-muted">
-            Two minutes to set up: add your CGPA, upload your resume, connect Gmail. Pathlight takes it from there.
+            Two minutes to set up: tell Pathlight what you&apos;re looking for and upload your resume. It takes it from there.
           </p>
           <Link href={cta.href} className={buttonClasses("primary", "lg", "mt-9 px-5")}>
             {cta.label} <ArrowRight size={15} />
@@ -345,7 +374,13 @@ export default function LandingPage() {
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 py-8 text-[13px] text-subtle sm:flex-row">
           <Brand />
-          <p>Made for students, by a student. Your data is never sold or shared.</p>
+          <div className="flex flex-col items-center gap-2 sm:items-end">
+            <p>Made for students, by a student. Your data is never sold.</p>
+            <div className="flex gap-4">
+              <Link href="/privacy" className="hover:text-fg">Privacy</Link>
+              <Link href="/terms" className="hover:text-fg">Terms</Link>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

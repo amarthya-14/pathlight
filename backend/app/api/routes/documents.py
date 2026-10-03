@@ -9,13 +9,11 @@ upload/paste time, so the Skill Gap Agent (Gate 5) has something to search again
 soon as a resume exists — not indexed lazily on first Skill Gap run, which would make
 the first ingestion after a resume upload silently slower and harder to reason about.
 """
-import io
-
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from pypdf import PdfReader
 
 from app.api.deps import get_current_user
+from app.core.resume_links import extract_pdf
 from app.mcp.sandbox import sanitize_filename, user_dir
 from app.models.document import Document, DocumentType
 from app.models.user import User
@@ -26,23 +24,21 @@ router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10MB — generous for a resume/JD PDF, cheap abuse guard
 ALLOWED_CONTENT_TYPES = {"application/pdf", "text/plain"}
+MAX_STORED_BYTES = 5 * 1024 * 1024  # resumes kept in MongoDB (see Document.content)
 
 
-def _extract_text(content_type: str, raw: bytes) -> str | None:
+def _extract_text(content_type: str, raw: bytes) -> tuple[str | None, list[dict]]:
     """Best-effort text extraction. Returning None on failure (rather than raising) means
     a corrupt/scanned-image PDF doesn't block the upload — it just has no extracted_text,
     which downstream agents (Gate 4+) should treat as 'nothing to work with yet' rather
-    than crashing the pipeline."""
+    than crashing the pipeline. PDFs keep their hyperlinks: link anchors ("GitHub Repo")
+    are rewritten to the real, visible URL (app/core/resume_links.py)."""
     if content_type == "text/plain":
-        return raw.decode("utf-8", errors="replace")
+        return raw.decode("utf-8", errors="replace"), []
     if content_type == "application/pdf":
-        try:
-            reader = PdfReader(io.BytesIO(raw))
-            text = "\n".join(page.extract_text() or "" for page in reader.pages)
-            return text.strip() or None
-        except Exception:
-            return None
-    return None
+        text, links = extract_pdf(raw)
+        return text, [link.as_dict() for link in links]
+    return None, []
 
 
 async def _index_if_resume(document: Document) -> None:
@@ -82,13 +78,16 @@ async def upload_document(
     dest = user_dir(str(current_user.id)) / storage_filename
     dest.write_bytes(raw)
 
+    extracted_text, links = _extract_text(file.content_type, raw)
     document = Document(
         owner_id=current_user.id,
         doc_type=doc_type,
         original_filename=file.filename or storage_filename,
         storage_filename=storage_filename,
         content_type=file.content_type,
-        extracted_text=_extract_text(file.content_type, raw),
+        extracted_text=extracted_text,
+        links=links,
+        content=raw if doc_type == DocumentType.RESUME and len(raw) <= MAX_STORED_BYTES else None,
     )
     await document.insert()
     await _index_if_resume(document)
@@ -111,6 +110,7 @@ async def paste_document(
         storage_filename=storage_filename,
         content_type="text/plain",
         extracted_text=payload.text,
+        links=[],
     )
     await document.insert()
     await _index_if_resume(document)

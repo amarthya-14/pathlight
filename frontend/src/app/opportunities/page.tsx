@@ -19,7 +19,7 @@ const AGENT_STEPS = [
   { icon: BadgeCheck, label: "Checking eligibility" },
   { icon: ScanSearch, label: "Comparing skills to your resume" },
   { icon: BookOpenCheck, label: "Building a prep plan" },
-  { icon: Wand2, label: "Tailoring your resume" },
+  { icon: Wand2, label: "Tailoring your resume (finishes in the background)" },
 ];
 
 const SAMPLE =
@@ -65,7 +65,7 @@ export default function OpportunitiesPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<IngestResponse | null>(null);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "gmail" | "manual">("all");
+  const [filter, setFilter] = useState<"all" | "gmail" | "web" | "manual">("all");
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadApplications = () => {
@@ -95,7 +95,9 @@ export default function OpportunitiesPage() {
       setResult(res);
       setRawText("");
       loadApplications();
-      toast("Opportunity analysed", { description: `${res.role} at ${res.company_name}` });
+      toast("Opportunity analysed", {
+        description: `${res.role} at ${res.company_name} — your tailored resume will be ready in 1–2 minutes.`,
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Ingestion failed");
     } finally {
@@ -107,8 +109,10 @@ export default function OpportunitiesPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (applications ?? []).filter((a) => {
+      const web = a.source?.startsWith("web:") ?? false;
       if (filter === "gmail" && a.source !== "gmail_mcp") return false;
-      if (filter === "manual" && a.source === "gmail_mcp") return false;
+      if (filter === "web" && !web) return false;
+      if (filter === "manual" && (a.source === "gmail_mcp" || web)) return false;
       return !q || a.company_name.toLowerCase().includes(q) || a.role.toLowerCase().includes(q);
     });
   }, [applications, query, filter]);
@@ -116,13 +120,14 @@ export default function OpportunitiesPage() {
   if (authLoading || !user) return null;
 
   const gmailCount = (applications ?? []).filter((a) => a.source === "gmail_mcp").length;
+  const webCount = (applications ?? []).filter((a) => a.source?.startsWith("web:")).length;
 
   return (
     <div className="space-y-10">
       <div className="animate-fade-in">
         <PageHeader
-          title="Opportunities"
-          subtitle="Paste any job description or placement email. Pathlight extracts the details, checks your eligibility, compares skills, plans your prep and tailors your resume."
+          title="Add a job"
+          subtitle="Found a role somewhere else? Paste the job description or placement email — Pathlight extracts the details, checks eligibility, compares skills, plans your prep and tailors your resume."
         />
       </div>
 
@@ -208,7 +213,8 @@ export default function OpportunitiesPage() {
               [
                 ["all", "All", applications?.length ?? 0],
                 ["gmail", "From Gmail", gmailCount],
-                ["manual", "Added by you", (applications?.length ?? 0) - gmailCount],
+                ["web", "Job boards", webCount],
+                ["manual", "Pasted", (applications?.length ?? 0) - gmailCount - webCount],
               ] as const
             ).map(([key, label, count]) => (
               <button

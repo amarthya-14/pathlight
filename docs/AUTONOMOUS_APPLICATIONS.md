@@ -139,7 +139,7 @@ it's an SDK-transport-level behavior, not specific to the Filesystem server.
 **Poll worker:** `app/workers/gmail_poll.py`, an in-process background task — the same
 "background worker task inside the same service, not a separate deployable" pattern
 `ARCHITECTURE.md` §4 already uses for the outbox. Runs every
-`GMAIL_POLL_INTERVAL_SECONDS` (default 900) per connected `Integration`: searches a small,
+`GMAIL_POLL_INTERVAL_SECONDS` (default 86400 — once a day, see §13) per connected `Integration`: searches a small,
 explicit sender allowlist (`GMAIL_ALERT_SENDERS`), and for each new matching message calls
 `run_opportunity_pipeline(raw_text=<subject+body>, source="gmail_mcp", user_id=...)` — the
 existing pipeline entry point, unchanged. Tracks `last_polled_at` per `Integration` to
@@ -328,3 +328,49 @@ beyond the design above, stated plainly:
   several jobs; Discovery extracts the primary one. Splitting digests into per-job
   postings is the obvious next improvement.
 - Phase 2 (browser form-fill for Easy Apply / ATS portals) remains unstarted, as planned.
+
+## 13. Changes on 2026-10-03 (post-launch feedback)
+
+- **Daily schedule.** Polling is once a day (in-process loop wakes hourly, polls only users
+  whose `last_polled_at` is ~24h old; the GitHub Actions cron fires at 09:00 IST). Manual
+  "Check now" (`POST /api/integrations/gmail/sync`) runs as a background task and returns
+  202 immediately; `GET /api/integrations/gmail/sync` reports `running | done | error`,
+  stored on the `Integration` so reloads and multiple processes see it.
+- **Digest splitting.** `run_digest_discovery` extracts every job in an alert email (max 6,
+  de-duplicated) and each runs through the pipeline with the extraction pre-filled.
+- **Resume links.** Uploads use `app/core/resume_links.py` (pdfplumber): link annotations
+  are mapped to their anchor words and rewritten as visible URLs ("[Code: GitHub Repo]" ->
+  "Code: github.com/user/repo"); credential/badge links are dropped. Older resumes are
+  re-extracted from the stored file on first use.
+- **ATS loop.** `app/core/ats.py` scores a resume deterministically (keywords 45, title 5,
+  sections 15, contact 10, format 15, impact 10). The tailor revises up to 3 times until it
+  reaches the honest maximum (100 minus points blocked by skills the user lacks), and also
+  rejects dropped URLs, deleted content, lost skill lines and inflated wording. The full JD
+  (`Opportunity.description`) is now passed to the tailor.
+- **Job boards.** `app/sources/job_boards.py` pulls public Greenhouse/Lever boards and
+  Remotive/Himalayas/Arbeitnow (no scraping, no keys), filtered to India/remote-open tech
+  roles; `/api/jobs/feed` ranks them per user deterministically, `/api/jobs/{id}/track`
+  runs one through the pipeline in the background.
+
+
+## 14. Relevance, experience and the application kit (2026-10-03, second pass)
+
+- **Resume-based matching** (`app/sources/job_signals.py`, `job_matching.py`): every listing
+  gets a field (backend, frontend, ml_ai, data_analyst, non_tech, ...), a minimum
+  experience read from its description, entry-level and batch signals — at fetch time.
+  The feed shows a listing only if it's in the student's field (from target roles +
+  resume skills), at their level (freshers never see "3+ years"/senior roles), in their
+  batch, posted within the window (default 30 days) and ≥ the match threshold (default
+  60%). Hidden listings are counted by reason and shown to the student.
+- **Sources**: + Ashby, SmartRecruiters and ~25 more company boards; Adzuna and Jooble
+  (official aggregator APIs, the main source of fresher roles) activate with free keys
+  (`ADZUNA_APP_ID`/`ADZUNA_APP_KEY`, `JOOBLE_API_KEY`). Company career pages are mostly
+  experienced hiring — without an aggregator key a fresher's feed stays small.
+- **Gmail intake** skips alert jobs that are senior or outside the student's field.
+- **Application kit** (`app/core/application_kit.py`, `GET /api/applications/{id}/kit`):
+  honest answers for LinkedIn/ATS screening questions (per-skill years computed from
+  dated internship entries, whole numbers, with the reasoning), CTC/notice/relocation,
+  links, plus a referral helper (alumni/team/recruiter LinkedIn searches, a ≤300-char
+  connection note and a follow-up message).
+- **Review screen** warns when a posting asks for more experience than the student has,
+  and asks for the full JD on alert-sourced jobs (then re-tailors against it).

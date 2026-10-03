@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Code2, FileText, Loader2, UploadCloud } from "lucide-react";
+import { CheckCircle2, Code2, Download, FileText, Link2, Loader2, Sparkles, Trash2, UploadCloud } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth-context";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, saveBlob } from "@/lib/api";
 import type { DocumentOut, ProfileOut } from "@/lib/types";
+import { profilePayload } from "@/lib/profile";
+import { ChipPicker } from "@/components/Chips";
 import { useToast } from "@/components/Toast";
 import { Alert, Button, Card, Field, PageHeader, PageSkeleton, Progress, TextArea, TextInput } from "@/components/ui";
 
@@ -30,8 +32,20 @@ function Section({ title, description, children }: { title: string; description:
   );
 }
 
+const ROLE_SUGGESTIONS = ["Software Engineer", "Backend Developer", "Frontend Developer", "Full Stack Developer", "Data Analyst", "ML Engineer", "AI Engineer", "DevOps Engineer"];
+const CITY_SUGGESTIONS = ["Bengaluru", "Hyderabad", "Pune", "Chennai", "Mumbai", "Delhi NCR"];
+
 export default function ProfilePage() {
-  const { user, loading: authLoading } = useRequireAuth();
+  const { user, loading: authLoading, setUser, setProfile: setContextProfile } = useRequireAuth();
+  const [name, setName] = useState("");
+  const [college, setCollege] = useState("");
+  const [gradYear, setGradYear] = useState("");
+  const [roles, setRoles] = useState<string[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
+  const [remote, setRemote] = useState(true);
+  const [linkCount, setLinkCount] = useState<number | null>(null);
+  const [expectedCtc, setExpectedCtc] = useState("");
+  const [noticePeriod, setNoticePeriod] = useState("");
   const toast = useToast();
   const [profile, setProfile] = useState<ProfileOut | null>(null);
   const [cgpa, setCgpa] = useState("");
@@ -55,8 +69,16 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!user) return;
+    setName(user.full_name ?? "");
     api.getProfile().then((p) => {
       setProfile(p);
+      setCollege(p.college ?? "");
+      setGradYear(p.graduation_year?.toString() ?? "");
+      setRoles(p.target_roles ?? []);
+      setCities(p.preferred_locations ?? []);
+      setRemote(p.open_to_remote ?? true);
+      setExpectedCtc(p.expected_ctc_lpa?.toString() ?? "");
+      setNoticePeriod(p.notice_period ?? "");
       setCgpa(p.cgpa?.toString() ?? "");
       setBranch(p.branch ?? "");
       setExperience(p.experience_years?.toString() ?? "0");
@@ -70,15 +92,25 @@ export default function ProfilePage() {
     setSaving(true);
     setError(null);
     try {
-      setProfile(
-        await api.upsertProfile({
+      if (name.trim() && name.trim() !== user?.full_name) setUser(await api.updateMe(name.trim()));
+      const saved = await api.upsertProfile(
+        profilePayload(profile, {
           cgpa: cgpa ? Number(cgpa) : null,
           branch: branch || null,
           github_username: githubUsername || null,
           experience_years: Number(experience),
+          college: college.trim() || null,
+          graduation_year: gradYear ? Number(gradYear) : null,
+          target_roles: roles,
+          preferred_locations: cities,
+          open_to_remote: remote,
+          expected_ctc_lpa: expectedCtc ? Number(expectedCtc) : null,
+          notice_period: noticePeriod.trim() || null,
         })
       );
-      toast("Profile saved", { description: "Use “Re-check” on an application to apply the new details to it." });
+      setProfile(saved);
+      setContextProfile(saved);
+      toast("Profile saved", { description: "Job matches update right away. Use “Re-check” on an application to re-run eligibility." });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Failed to save profile");
     } finally {
@@ -93,6 +125,7 @@ export default function ProfilePage() {
     try {
       const doc = await api.uploadDocument(file, "resume");
       loadDocuments();
+      setLinkCount((doc.extracted_text?.match(/(?:github|linkedin|gitlab)\.com\/\S+/gi) ?? []).length);
       if (!doc.extracted_text || !doc.extracted_text.trim()) {
         setResumeError(
           "Uploaded, but no text could be read from this file (likely a scanned or image PDF). Export your resume as a text-based PDF, or paste the text instead."
@@ -129,7 +162,13 @@ export default function ProfilePage() {
   if (!profile) return <PageSkeleton />;
 
   const latestResume = documents.find((d) => d.doc_type === "resume"); // list is newest-first
-  const completeness = [Boolean(profile.cgpa), Boolean(profile.branch), profile.experience_years !== null, Boolean(latestResume)].filter(Boolean).length;
+  const completeness = [
+    Boolean(user.full_name),
+    Boolean(profile.cgpa && profile.branch),
+    Boolean(profile.graduation_year),
+    profile.target_roles.length > 0,
+    Boolean(latestResume),
+  ].filter(Boolean).length;
 
   return (
     <div className="max-w-4xl">
@@ -139,16 +178,56 @@ export default function ProfilePage() {
           subtitle="Your details power eligibility checks, skill gaps and tailored resumes."
           actions={
             <div className="flex items-center gap-3 text-[13px] text-muted">
-              <Progress value={completeness * 25} tone="ok" className="w-24" />
-              {completeness * 25}% complete
+              <Progress value={completeness * 20} tone="ok" className="w-24" />
+              {completeness * 20}% complete
             </div>
           }
         />
       </div>
 
       <Card className="p-5 sm:p-7">
+        <form onSubmit={onSaveProfile}>
+        <Section title="About you" description="Your name goes on tailored resumes and cover notes.">
+          <div className="space-y-4">
+            <Field label="Full name">
+              <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Asha Rao" required />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
+              <Field label="College">
+                <TextInput value={college} onChange={(e) => setCollege(e.target.value)} placeholder="VIT-AP University" />
+              </Field>
+              <Field label="Graduation year">
+                <TextInput type="number" min="1990" max="2040" value={gradYear} onChange={(e) => setGradYear(e.target.value)} placeholder="2027" />
+              </Field>
+            </div>
+          </div>
+        </Section>
+
+        <Section title="What you're looking for" description="Ranks the jobs Pathlight finds for you every day.">
+          <div className="space-y-5">
+            <Field label="Target roles">
+              <ChipPicker options={ROLE_SUGGESTIONS} value={roles} onChange={setRoles} placeholder="Another role…" />
+            </Field>
+            <Field label="Preferred locations">
+              <ChipPicker options={CITY_SUGGESTIONS} value={cities} onChange={setCities} placeholder="Another city…" />
+            </Field>
+            <label className="flex cursor-pointer items-center gap-2 text-[13px] text-fg">
+              <input type="checkbox" className="h-3.5 w-3.5 accent-[var(--ink)]" checked={remote} onChange={(e) => setRemote(e.target.checked)} />
+              Open to remote roles that hire from India
+            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Expected CTC (LPA)" hint="Used for application forms that ask. Leave blank for “as per company standards”.">
+                <TextInput type="number" min="0" step="0.5" value={expectedCtc} onChange={(e) => setExpectedCtc(e.target.value)} placeholder="6" />
+              </Field>
+              <Field label="When can you join?" hint="Default: from June of your graduation year.">
+                <TextInput value={noticePeriod} onChange={(e) => setNoticePeriod(e.target.value)} placeholder="Immediate" />
+              </Field>
+            </div>
+          </div>
+        </Section>
+
         <Section title="Academic details" description="Checked against each posting's CGPA, branch and experience requirements.">
-          <form onSubmit={onSaveProfile} className="space-y-4">
+          <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="CGPA">
                 <TextInput type="number" step="0.01" min="0" max="10" placeholder="8.50" value={cgpa} onChange={(e) => setCgpa(e.target.value)} />
@@ -187,8 +266,9 @@ export default function ProfilePage() {
                 {saving ? "Saving…" : "Save changes"}
               </Button>
             </div>
-          </form>
+          </div>
         </Section>
+        </form>
 
         <Section title="Resume" description="The single source of truth for tailoring. Pathlight rewords it per role, but never adds to it.">
           {latestResume ? (
@@ -247,6 +327,12 @@ export default function ProfilePage() {
             />
           </label>
 
+          {linkCount !== null && linkCount > 0 && (
+            <p className="animate-fade-in mt-3 flex items-center gap-1.5 text-xs text-ok">
+              <Link2 size={13} /> Kept {linkCount} profile/project link{linkCount === 1 ? "" : "s"} — they stay clickable on tailored resumes.
+            </p>
+          )}
+
           {resumeError && (
             <Alert tone="bad" className="mt-3">
               {resumeError}
@@ -266,6 +352,155 @@ export default function ProfilePage() {
           )}
         </Section>
       </Card>
+
+      <AutopilotCard profile={profile} onSaved={(p) => {
+        setProfile(p);
+        setContextProfile(p);
+      }} />
+
+      <DataCard />
     </div>
+  );
+}
+
+function AutopilotCard({ profile, onSaved }: { profile: ProfileOut; onSaved: (p: ProfileOut) => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const save = async (patch: Partial<ProfileOut>) => {
+    setBusy(true);
+    try {
+      const saved = await api.upsertProfile(profilePayload(profile, patch));
+      onSaved(saved);
+      if (patch.autopilot_enabled !== undefined)
+        toast(patch.autopilot_enabled ? "Autopilot on" : "Autopilot off", {
+          description: patch.autopilot_enabled
+            ? "Each morning Pathlight prepares your best new matches. Nothing is sent without you."
+            : undefined,
+        });
+    } catch (err) {
+      toast(err instanceof ApiError ? err.detail : "Couldn't save", { tone: "bad" });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const on = profile.autopilot_enabled;
+  return (
+    <Card className="mt-6 p-5 sm:p-7">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="max-w-xl">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="text-accent" />
+            <h2 className="text-[15px] font-semibold text-fg">Autopilot</h2>
+            {on && <span className="rounded-md bg-ok-soft px-1.5 py-0.5 text-[11px] font-medium text-ok">On</span>}
+          </div>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
+            Every morning, Pathlight takes your best new matches from the past week — up to 3 a day — checks eligibility,
+            finds skill gaps and tailors your resume, so they&apos;re waiting in Applications for your review.{" "}
+            <strong className="font-medium text-fg">It never applies on its own.</strong>
+          </p>
+          <label className="mt-4 flex items-center gap-2 text-[13px] text-muted">
+            Only jobs matching at least
+            <select
+              value={profile.autopilot_min_match}
+              disabled={busy}
+              onChange={(e) => save({ autopilot_min_match: Number(e.target.value) })}
+              className="h-8 rounded-lg border border-line-strong bg-surface px-2 text-[13px] font-medium text-fg"
+            >
+              {[60, 65, 70, 75, 80, 85, 90].map((t) => (
+                <option key={t} value={t}>
+                  {t}%
+                </option>
+              ))}
+            </select>
+          </label>
+          {profile.autopilot_last_run && (
+            <p className="mt-2 text-xs text-subtle">Last run {profile.autopilot_last_run}.</p>
+          )}
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-label="Autopilot"
+          disabled={busy}
+          onClick={() => save({ autopilot_enabled: !on })}
+          className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-300 ${on ? "bg-ink" : "bg-line-strong"}`}
+        >
+          <span
+            className={`absolute left-0 top-1 h-5 w-5 rounded-full bg-surface shadow transition-transform duration-300 ${on ? "translate-x-6" : "translate-x-1"}`}
+            style={{ transitionTimingFunction: "var(--ease-out)" }}
+          />
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+function DataCard() {
+  const toast = useToast();
+  const { logout } = useRequireAuth();
+  const [confirming, setConfirming] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState<"export" | "delete" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const onExport = async () => {
+    setBusy("export");
+    try {
+      const { blob } = await api.exportAccount();
+      saveBlob(blob, "pathlight-data.json");
+    } catch (err) {
+      toast(err instanceof ApiError ? err.detail : "Export failed", { tone: "bad" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onDelete = async () => {
+    setBusy("delete");
+    setError(null);
+    try {
+      await api.deleteAccount();
+      logout();
+      window.location.assign("/");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Couldn't delete your account");
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card className="mt-6 p-5 sm:p-7">
+      <h2 className="text-[15px] font-semibold text-fg">Your data</h2>
+      <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-muted">
+        Download everything Pathlight stores about you, or delete your account. Deleting revokes Gmail access with Google
+        and permanently erases your resume, profile and applications.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button variant="secondary" onClick={onExport} loading={busy === "export"}>
+          {busy !== "export" && <Download size={14} />} Export my data
+        </Button>
+        {!confirming && (
+          <Button variant="danger" onClick={() => setConfirming(true)}>
+            <Trash2 size={14} /> Delete account
+          </Button>
+        )}
+      </div>
+      {confirming && (
+        <div className="animate-scale-in mt-4 rounded-xl border border-bad/30 bg-bad-soft p-4">
+          <p className="text-[13px] font-medium text-bad">This can&apos;t be undone. Type DELETE to confirm.</p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <TextInput value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="DELETE" className="sm:max-w-[200px]" autoFocus />
+            <Button variant="danger" onClick={onDelete} disabled={typed.trim().toUpperCase() !== "DELETE"} loading={busy === "delete"}>
+              Permanently delete
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+          </div>
+          {error && <p className="mt-2 text-xs font-medium text-bad">{error}</p>}
+        </div>
+      )}
+    </Card>
   );
 }

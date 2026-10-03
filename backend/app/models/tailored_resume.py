@@ -25,6 +25,9 @@ class TailoredResume(Document):
     skills_emphasized: list[str] = Field(default_factory=list)
     confidence: float
     warnings: list[str] = Field(default_factory=list)
+    # Deterministic ATS score of tailored_text against the posting (app/core/ats.py) —
+    # AtsReport.as_dict(): score, breakdown, matched/fixable/missing keywords, blocked_points.
+    ats: dict | None = None
     generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

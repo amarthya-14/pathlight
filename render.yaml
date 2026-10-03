@@ -43,3 +43,29 @@ services:
         sync: false  # copy the SAME key as local only if migrating local tokens; else generate fresh
       - key: CRON_SECRET
         generateValue: true
+      # --- Added for launch (see docs/DEPLOYMENT.md "Launch checklist") ---
+      - key: ADMIN_EMAILS
+        sync: false  # your email — unlocks /admin
+      - key: ADZUNA_APP_ID
+        sync: false  # free: developer.adzuna.com — main source of fresher jobs
+      - key: ADZUNA_APP_KEY
+        sync: false
+      - key: JOOBLE_API_KEY
+        sync: false  # free: jooble.org/api/about
+      - key: GOOGLE_LOGIN_CLIENT_ID
+        sync: false  # optional: separate PUBLISHED OAuth client for "Continue with Google"
+      - key: GOOGLE_LOGIN_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_LOGIN_REDIRECT_URI
+        sync: false  # https://<service>.onrender.com/api/auth/google/callback
+      - key: SMTP_HOST
+        sync: false  # optional, for password-reset emails, e.g. smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false  # Gmail: an App Password, not your account password
+      - key: SMTP_FROM
+        sync: false  # e.g. Pathlight <yourapp@gmail.com>
+

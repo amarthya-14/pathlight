@@ -34,6 +34,10 @@ class ApplicationOut(BaseModel):
     source: str | None = None
     apply_email: str | None = None
     application_url: str | None = None
+    # What the posting asks for in experience (None = it doesn't say / unknown), and
+    # whether Pathlight has the real job description or only an alert's title+company.
+    min_experience_years: float | None = None
+    has_job_description: bool = False
     eligibility: EligibilityResult | None
     skill_gap: SkillGapResult | None
     skill_gap_note: str | None = None
@@ -53,7 +57,26 @@ class TailoredResumeOut(BaseModel):
     skills_emphasized: list[str]
     confidence: float
     warnings: list[str]
+    ats: dict | None = None
     generated_at: datetime
+
+
+class KitAnswer(BaseModel):
+    question: str
+    answer: str
+    note: str = ""
+
+
+class KitLink(BaseModel):
+    label: str
+    url: str
+
+
+class ApplicationKitOut(BaseModel):
+    answers: list[KitAnswer]
+    connection_note: str
+    referral_message: str
+    search_links: list[KitLink]
 
 
 class StatusUpdateRequest(BaseModel):
@@ -67,6 +90,11 @@ class RecheckRequest(BaseModel):
     # Optional: the full job description. Without it, eligibility is simply re-run on the
     # current data (e.g. after updating CGPA or experience in Profile).
     job_description: str | None = None
+
+
+class TailoredEditRequest(BaseModel):
+    tailored_text: str = Field(min_length=50, max_length=20000)
+    cover_note: str = Field(min_length=1, max_length=5000)
 
 
 class ReviewRequest(BaseModel):

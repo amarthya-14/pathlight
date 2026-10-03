@@ -56,14 +56,14 @@ describe("api.request", () => {
       json: async () => ({ id: "1", email: "a@b.com", full_name: null }),
     });
 
-    const result = await api.register("a@b.com", "password123");
+    const result = await api.register("a@b.com", "password123", " Asha Rao ");
 
     expect(result).toEqual({ id: "1", email: "a@b.com", full_name: null });
     const [url, options] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(url).toBe("http://localhost:8000/api/auth/register");
     expect(options.method).toBe("POST");
     expect(options.headers["Content-Type"]).toBe("application/json");
-    expect(JSON.parse(options.body)).toEqual({ email: "a@b.com", password: "password123" });
+    expect(JSON.parse(options.body)).toEqual({ email: "a@b.com", password: "password123", full_name: "Asha Rao" });
   });
 
   it("attaches the Authorization header when a token is present and auth is required", async () => {

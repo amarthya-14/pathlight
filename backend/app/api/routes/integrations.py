@@ -8,9 +8,10 @@ No route here ever returns a token. Responses go through IntegrationOut, which h
 token fields at all.
 """
 import hmac
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
 from fastapi.responses import RedirectResponse
 
 from app.api.deps import get_current_user
@@ -26,8 +27,9 @@ from app.integrations.google_oauth import (
 )
 from app.models.integration import Integration
 from app.models.user import User
-from app.schemas.integration import GmailConnectOut, GmailSyncOut, IntegrationOut
-from app.workers.gmail_poll import poll_all_once, poll_integration
+from app.schemas.integration import GmailConnectOut, GmailSyncOut, GmailSyncStatus, IntegrationOut
+from app.workers.autopilot import run_autopilot_once
+from app.workers.gmail_poll import poll_all_once, run_manual_sync
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 internal_router = APIRouter(prefix="/api/internal", include_in_schema=False)
@@ -35,16 +37,18 @@ internal_router = APIRouter(prefix="/api/internal", include_in_schema=False)
 
 @internal_router.post("/gmail/poll")
 async def cron_gmail_poll(x_cron_secret: str | None = Header(default=None)):
-    """Gate 11: called every 30 min by .github/workflows/gmail-poll.yml. On a free host
+    """Gate 11: called once a day by .github/workflows/gmail-poll.yml. On a free host
     that sleeps when idle, the request itself wakes the server, then this runs the same
     poll the in-process loop would have. 404 (not 401/403) when the secret is missing or
     wrong, so the route doesn't advertise its existence."""
     if not settings.CRON_SECRET or not x_cron_secret or not hmac.compare_digest(x_cron_secret, settings.CRON_SECRET):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    results = await poll_all_once()
+    results = await poll_all_once(only_due=True) if oauth_configured() else {}
+    autopilot = await run_autopilot_once()
     return {
         "users_polled": len(results),
         "opportunities_ingested": sum(r.opportunities_ingested for r in results.values()),
+        "autopilot_prepared": sum(autopilot.values()),
     }
 
 
@@ -99,10 +103,45 @@ async def gmail_disconnect(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gmail is not connected.")
 
 
-@router.post("/gmail/sync", response_model=GmailSyncOut)
-async def gmail_sync(current_user: User = Depends(get_current_user)):
+# A sync stuck in "running" this long is assumed dead (server restarted mid-run).
+STALE_SYNC = timedelta(minutes=20)
+
+
+def _sync_status(integration: Integration) -> GmailSyncStatus:
+    return GmailSyncStatus(
+        state=integration.sync_state,
+        started_at=integration.sync_started_at,
+        result=GmailSyncOut(**integration.last_sync_result)
+        if integration.sync_state == "done" and integration.last_sync_result
+        else None,
+        error=(integration.last_sync_result or {}).get("error") if integration.sync_state == "error" else None,
+    )
+
+
+@router.post("/gmail/sync", response_model=GmailSyncStatus, status_code=status.HTTP_202_ACCEPTED)
+async def gmail_sync(background: BackgroundTasks, current_user: User = Depends(get_current_user)):
+    """Starts a check of the inbox in the background and returns at once — processing
+    every job in every new alert can take minutes, longer than a request should hang
+    (and longer than free hosts let one). Poll GET /gmail/sync for the outcome."""
     integration = await get_gmail_integration(str(current_user.id))
     if integration is None or integration.status != "connected":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Connect Gmail first.")
-    result = await poll_integration(integration)
-    return GmailSyncOut(**result.__dict__)
+    started = integration.sync_started_at
+    if started is not None and started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    if integration.sync_state == "running" and started and datetime.now(timezone.utc) - started < STALE_SYNC:
+        return _sync_status(integration)
+    integration.sync_state = "running"
+    integration.sync_started_at = datetime.now(timezone.utc)
+    integration.last_sync_result = None
+    await integration.save()
+    background.add_task(run_manual_sync, integration.id)
+    return _sync_status(integration)
+
+
+@router.get("/gmail/sync", response_model=GmailSyncStatus)
+async def gmail_sync_status(current_user: User = Depends(get_current_user)):
+    integration = await get_gmail_integration(str(current_user.id))
+    if integration is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gmail is not connected.")
+    return _sync_status(integration)

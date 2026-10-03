@@ -34,6 +34,23 @@ class Profile(Document):
     # Years of full-time work experience (0 = fresher). Checked against a posting's
     # min_experience_years by the Eligibility Agent.
     experience_years: float | None = None
+    # Who's using Pathlight — asked during onboarding, used to rank the job feed
+    # (target roles, locations) and to frame the app (graduation year -> fresher roles).
+    college: str | None = None
+    graduation_year: int | None = None
+    target_roles: list[str] = Field(default_factory=list)
+    preferred_locations: list[str] = Field(default_factory=list)
+    open_to_remote: bool = True
+    # Application-form answers Pathlight can't infer from the resume (Application kit).
+    expected_ctc_lpa: float | None = None
+    notice_period: str | None = None  # e.g. "Immediate", "Available from June 2027"
+    # Job-feed listings the student hid ("source:external_id"), newest last, capped.
+    dismissed_jobs: list[str] = Field(default_factory=list)
+    # Autopilot (app/workers/autopilot.py): each morning, prepare the best new matches —
+    # tracked, checked and tailored, waiting for review. Never applies by itself.
+    autopilot_enabled: bool = False
+    autopilot_min_match: int = 75
+    autopilot_last_run: str | None = None  # IST date of the last run
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

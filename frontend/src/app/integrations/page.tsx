@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Check, Inbox, Lock, Mail, RefreshCw, Send, ShieldCheck, TriangleAlert, Unplug } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth-context";
 import { api, ApiError } from "@/lib/api";
-import type { GmailSyncOut, IntegrationOut } from "@/lib/types";
+import type { GmailSyncOut, GmailSyncStatus, IntegrationOut } from "@/lib/types";
 import { Alert, Badge, Button, buttonClasses, Card, PageHeader, Skeleton } from "@/components/ui";
 
 const CALLBACK_ERRORS: Record<string, string> = {
@@ -21,13 +21,41 @@ export default function IntegrationsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<GmailSyncOut | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // "Check now" runs on the server in the background (every job in every alert goes
+  // through the full pipeline — minutes, not seconds). Poll its status until it settles.
+  const followSync = useCallback((status: GmailSyncStatus) => {
+    if (pollTimer.current) clearTimeout(pollTimer.current);
+    if (status.state === "running") {
+      setSyncing(true);
+      pollTimer.current = setTimeout(() => {
+        api.gmailSyncStatus().then(followSync).catch(() => setSyncing(false));
+      }, 3000);
+      return;
+    }
+    setSyncing(false);
+    if (status.state === "done" && status.result) setSyncResult(status.result);
+    if (status.state === "error") setError(status.error ? `Check failed: ${status.error}` : "The inbox check failed.");
+  }, []);
+
+  useEffect(() => () => {
+    if (pollTimer.current) clearTimeout(pollTimer.current);
+  }, []);
 
   const load = useCallback(() => {
     api
       .listIntegrations()
-      .then(setIntegrations)
+      .then((list) => {
+        setIntegrations(list);
+        // Pick up a check that's still running from before a reload.
+        if (list.some((i) => i.provider === "gmail" && i.status === "connected")) {
+          api.gmailSyncStatus().then((s) => s.state === "running" && followSync(s)).catch(() => {});
+        }
+      })
       .catch(() => setIntegrations([]));
-  }, []);
+  }, [followSync]);
 
   useEffect(() => {
     if (!user) return;
@@ -64,10 +92,14 @@ export default function IntegrationsPage() {
 
   const onSync = () =>
     run("sync", async () => {
-      const result = await api.syncGmail();
-      setSyncResult(result);
-      load();
+      setSyncResult(null);
+      followSync(await api.syncGmail());
     });
+
+  // Refresh "last checked" once a background check finishes.
+  useEffect(() => {
+    if (!syncing && syncResult) load();
+  }, [syncing, syncResult, load]);
 
   const onDisconnect = () =>
     run("disconnect", async () => {
@@ -126,9 +158,9 @@ export default function IntegrationsPage() {
                 </Button>
               )}
               {connected && (
-                <Button variant="secondary" onClick={onSync} loading={busy === "sync"} disabled={busy !== null}>
-                  {busy !== "sync" && <RefreshCw size={13} />}
-                  {busy === "sync" ? "Checking inbox…" : "Check for new alerts"}
+                <Button variant="secondary" onClick={onSync} loading={busy === "sync" || syncing} disabled={busy !== null || syncing}>
+                  {busy !== "sync" && !syncing && <RefreshCw size={13} />}
+                  {syncing ? "Checking inbox…" : "Check now"}
                 </Button>
               )}
               {gmail && (
@@ -161,6 +193,13 @@ export default function IntegrationsPage() {
             </dl>
           )}
 
+          {syncing && (
+            <div className="sweep flex items-center gap-2.5 border-t border-line bg-surface-2 px-5 py-3.5 text-[13px] text-muted sm:px-6">
+              <Inbox size={15} className="shrink-0" />
+              Reading new job alerts and preparing each role — this runs on the server, so you can leave this page.
+            </div>
+          )}
+
           {gmail?.last_error && (
             <div className="border-t border-line px-5 py-3 sm:px-6">
               <Alert tone="bad">{gmail.last_error}</Alert>
@@ -176,7 +215,8 @@ export default function IntegrationsPage() {
                   <strong>
                     {syncResult.opportunities_ingested} new opportunit{syncResult.opportunities_ingested === 1 ? "y" : "ies"}
                   </strong>
-                  {syncResult.skipped_already_processed > 0 && `, ${syncResult.skipped_already_processed} already seen`}.
+                  {syncResult.skipped_already_processed > 0 && `, ${syncResult.skipped_already_processed} already seen`}
+                  {syncResult.skipped_not_relevant > 0 && `, ${syncResult.skipped_not_relevant} skipped (senior or outside your field)`}.
                   {syncResult.failures.length > 0 && <span className="text-warn"> {syncResult.failures.length} couldn&apos;t be processed.</span>}
                 </span>
               </div>
@@ -206,7 +246,7 @@ export default function IntegrationsPage() {
 
       {connected && (
         <p className="flex items-center gap-2 text-xs text-subtle">
-          <Check size={13} className="text-ok" /> New alerts are checked automatically every 15–30 minutes.
+          <Check size={13} className="text-ok" /> New alerts are checked automatically once a day (around 9 AM). Use “Check now” any time.
         </p>
       )}
     </div>

@@ -5,8 +5,11 @@ import type {
   DashboardHomeOut,
   DocumentDetailOut,
   DocumentOut,
-  GmailSyncOut,
+  GmailSyncStatus,
   IngestResponse,
+  JobFeedOut,
+  JobFeedParams,
+  ApplicationKit,
   IntegrationOut,
   PreparationPlanOut,
   ProfileOut,
@@ -108,8 +111,12 @@ export function saveBlob(blob: Blob, filename: string): void {
 }
 
 export const api = {
-  register: (email: string, password: string) =>
-    request<UserOut>("/api/auth/register", { method: "POST", body: { email, password }, auth: false }),
+  register: (email: string, password: string, fullName?: string) =>
+    request<UserOut>("/api/auth/register", {
+      method: "POST",
+      body: { email, password, full_name: fullName?.trim() || null },
+      auth: false,
+    }),
 
   login: async (email: string, password: string) => {
     const body = new URLSearchParams({ username: email, password }).toString();
@@ -123,6 +130,28 @@ export const api = {
   },
 
   me: () => request<UserOut>("/api/auth/me"),
+  googleLoginUrl: () => request<{ auth_url: string }>("/api/auth/google/start", { auth: false }),
+  forgotPassword: (email: string) =>
+    request<{ detail: string }>("/api/auth/forgot-password", { method: "POST", body: { email }, auth: false }),
+  resetPassword: async (token: string, password: string) => {
+    const result = await request<{ access_token: string }>("/api/auth/reset-password", {
+      method: "POST",
+      body: { token, password },
+      auth: false,
+    });
+    setToken(result.access_token);
+    return result;
+  },
+  exportAccount: () => requestFile("/api/account/export"),
+  deleteAccount: (password?: string) =>
+    request<void>("/api/account", { method: "DELETE", body: { confirm: "DELETE", password: password || null } }),
+  adminStats: () => request<Record<string, unknown>>("/api/admin/stats"),
+  editTailoredResume: (applicationId: string, tailoredText: string, coverNote: string) =>
+    request<TailoredResumeOut>(`/api/applications/${applicationId}/tailored-resume`, {
+      method: "PUT",
+      body: { tailored_text: tailoredText, cover_note: coverNote },
+    }),
+  updateMe: (fullName: string) => request<UserOut>("/api/auth/me", { method: "PATCH", body: { full_name: fullName } }),
 
   getProfile: () => request<ProfileOut>("/api/profile"),
   upsertProfile: (payload: ProfileUpsert) => request<ProfileOut>("/api/profile", { method: "PUT", body: payload }),
@@ -179,7 +208,22 @@ export const api = {
   listIntegrations: () => request<IntegrationOut[]>("/api/integrations"),
   gmailConnectUrl: () => request<{ auth_url: string }>("/api/integrations/gmail/connect"),
   disconnectGmail: () => request<void>("/api/integrations/gmail", { method: "DELETE" }),
-  syncGmail: () => request<GmailSyncOut>("/api/integrations/gmail/sync", { method: "POST" }),
+  syncGmail: () => request<GmailSyncStatus>("/api/integrations/gmail/sync", { method: "POST" }),
+  gmailSyncStatus: () => request<GmailSyncStatus>("/api/integrations/gmail/sync"),
+
+  jobFeed: (params: JobFeedParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.minMatch !== undefined) qs.set("min_match", String(params.minMatch));
+    if (params.days !== undefined) qs.set("days", String(params.days));
+    if (params.includeExperienced) qs.set("include_experienced", "true");
+    const s = qs.toString();
+    return request<JobFeedOut>(`/api/jobs/feed${s ? `?${s}` : ""}`);
+  },
+  dismissJob: (listingId: string) => request<void>(`/api/jobs/${listingId}/dismiss`, { method: "POST" }),
+  applicationKit: (applicationId: string) => request<ApplicationKit>(`/api/applications/${applicationId}/kit`),
+  trackJob: (listingId: string) =>
+    request<{ status: string; application_id: string | null }>(`/api/jobs/${listingId}/track`, { method: "POST" }),
 };
 
 export { ApiError };

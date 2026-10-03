@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { AuthLayout, PasswordInput } from "@/components/AuthLayout";
+import { AuthLayout, GoogleButton, PasswordInput } from "@/components/AuthLayout";
 import { Alert, Button, Field, TextInput } from "@/components/ui";
 
 export default function LoginPage() {
@@ -20,6 +20,13 @@ export default function LoginPage() {
   useEffect(() => {
     if (user) router.replace("/dashboard");
   }, [user, router]);
+
+  // Result of a "Continue with Google" round trip that didn't end in a session.
+  useEffect(() => {
+    const google = new URLSearchParams(window.location.search).get("google");
+    if (google === "error") setError("Google sign-in didn't complete. Please try again.");
+    if (google === "unverified") setError("That Google account's email isn't verified, so it can't be used to sign in.");
+  }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +56,7 @@ export default function LoginPage() {
         </>
       }
     >
+      <GoogleButton />
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label="Email">
           <TextInput
@@ -68,6 +76,11 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+          <div className="mt-2 flex justify-end">
+            <Link href="/forgot-password" className="text-xs text-muted underline-offset-4 hover:text-fg hover:underline">
+              Forgot password?
+            </Link>
+          </div>
         </Field>
         {error && <Alert tone="bad">{error}</Alert>}
         <Button type="submit" size="lg" loading={submitting} className="w-full">

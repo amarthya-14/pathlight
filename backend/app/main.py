@@ -14,8 +14,7 @@ from fastapi.responses import RedirectResponse
 
 from app.core.config import check_production_settings, settings
 from app.core.db import init_db
-from app.api.routes import auth, opportunities, documents, profile, ingest, preparation, applications, dashboard, integrations
-from app.integrations.google_oauth import oauth_configured
+from app.api.routes import account, admin, auth, opportunities, documents, profile, ingest, preparation, applications, dashboard, integrations, jobs
 from app.workers.gmail_poll import run_poll_loop
 
 
@@ -34,8 +33,9 @@ async def lifespan(app: FastAPI):
     # Gate 10: Gmail job-alert poller, in-process (docs/AUTONOMOUS_APPLICATIONS.md §5).
     # Only started when OAuth is actually configured — otherwise no user can have a
     # Gmail integration and the loop would just spin.
+    # The daily worker loop: Gmail alerts (when OAuth is configured) + Autopilot.
     poll_task = None
-    if settings.GMAIL_POLL_ENABLED and oauth_configured():
+    if settings.GMAIL_POLL_ENABLED:
         poll_task = asyncio.create_task(run_poll_loop())
     try:
         yield
@@ -59,6 +59,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Cross-origin JS can only read this header if it's exposed — without it, downloads
+    # (tailored resume PDF, data export) fall back to a generic filename in production.
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(auth.router)
@@ -71,6 +74,9 @@ app.include_router(applications.router)
 app.include_router(dashboard.router)
 app.include_router(integrations.router)
 app.include_router(integrations.internal_router)
+app.include_router(jobs.router)
+app.include_router(account.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")

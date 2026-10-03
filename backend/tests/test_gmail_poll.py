@@ -95,8 +95,12 @@ async def test_sync_route_runs_poll_for_current_user(client, monkeypatch):
 
     await connect_gmail(user_id)
     resp = client.post("/api/integrations/gmail/sync", headers=headers)
-    assert resp.status_code == 200
-    assert resp.json()["opportunities_ingested"] == 1
+    assert resp.status_code == 202
+    assert resp.json()["state"] == "running"
+    # TestClient runs the background task before returning, so the outcome is recorded.
+    status = client.get("/api/integrations/gmail/sync", headers=headers).json()
+    assert status["state"] == "done"
+    assert status["result"]["opportunities_ingested"] == 1
 
     apps = client.get("/api/applications", headers=headers).json()
     assert apps[0]["source"] == "gmail_mcp"
@@ -118,4 +122,62 @@ async def test_cron_poll_requires_secret(client, monkeypatch):
 
     resp = client.post("/api/internal/gmail/poll", headers={"X-Cron-Secret": "s3cret-value"})
     assert resp.status_code == 200
-    assert resp.json() == {"users_polled": 1, "opportunities_ingested": 1}
+    assert resp.json() == {"users_polled": 1, "opportunities_ingested": 1, "autopilot_prepared": 0}
+
+
+async def test_digest_email_becomes_one_opportunity_per_job(client, monkeypatch):
+    from app.agents.schemas import ExtractedOpportunities
+
+    configure_oauth(monkeypatch)
+    FakeGoogle([gmail_message("d1", "3 new jobs for you", "Python Dev at A... Backend at B...")]).install(monkeypatch)
+    _fake_llms(monkeypatch)
+    digest = ExtractedOpportunities(
+        opportunities=[
+            ExtractedOpportunity(company_name="DigestA", role="Python Developer", application_url="https://x.com/a"),
+            ExtractedOpportunity(company_name="DigestB", role="Backend Engineer", application_url="https://x.com/b"),
+            ExtractedOpportunity(company_name="DigestA", role="Python Developer"),  # duplicate in same email
+        ]
+    )
+    monkeypatch.setattr("app.agents.discovery.get_small_llm", lambda: FakeLLM(canned_result=digest))
+    user_id, _headers = _user(client, "digest@example.com")
+    await connect_gmail(user_id)
+
+    results = await poll_all_once()
+
+    assert results[user_id].opportunities_ingested == 2
+    roles = sorted(o.role for o in await Opportunity.find(Opportunity.source == "gmail_mcp").to_list())
+    assert roles == ["Backend Engineer", "Python Developer"]
+
+
+async def test_scheduled_poll_runs_once_a_day(client, monkeypatch):
+    configure_oauth(monkeypatch)
+    FakeGoogle([gmail_message("s1", "Alert", "AlertCo is hiring...")]).install(monkeypatch)
+    _fake_llms(monkeypatch)
+    user_id, _headers = _user(client, "daily@example.com")
+    await connect_gmail(user_id)
+
+    assert user_id in await poll_all_once(only_due=True)  # never polled -> due
+    assert user_id not in await poll_all_once(only_due=True)  # polled moments ago -> not due
+
+
+async def test_alert_jobs_outside_the_students_field_or_level_are_skipped(client, monkeypatch):
+    from app.agents.schemas import ExtractedOpportunities
+
+    configure_oauth(monkeypatch)
+    FakeGoogle([gmail_message("f1", "New jobs", "...")]).install(monkeypatch)
+    _fake_llms(monkeypatch)
+    digest = ExtractedOpportunities(opportunities=[
+        ExtractedOpportunity(company_name="Good", role="Python Developer Intern"),
+        ExtractedOpportunity(company_name="Senior", role="Senior Python Engineer"),
+        ExtractedOpportunity(company_name="Sales", role="Key Account Manager"),
+    ])
+    monkeypatch.setattr("app.agents.discovery.get_small_llm", lambda: FakeLLM(canned_result=digest))
+    user_id, headers = _user(client, "fit@example.com")
+    client.put("/api/profile", json={"cgpa": 9.0, "branch": "CSE", "experience_years": 0,
+                                     "target_roles": ["Backend Developer"]}, headers=headers)
+    await connect_gmail(user_id)
+
+    results = await poll_all_once()
+
+    assert results[user_id].opportunities_ingested == 1
+    assert results[user_id].skipped_not_relevant == 2

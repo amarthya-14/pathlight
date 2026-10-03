@@ -35,6 +35,12 @@ class ExtractedOpportunity(BaseModel):
     application_url: str | None = None
 
 
+class ExtractedOpportunities(BaseModel):
+    """Discovery output for a job-alert email: LinkedIn/Naukri digests list several jobs
+    in one email, and each one is a separate opportunity."""
+    opportunities: list[ExtractedOpportunity] = Field(default_factory=list)
+
+
 class EligibilityDecision(str, Enum):
     ELIGIBLE = "eligible"
     PARTIALLY_ELIGIBLE = "partially_eligible"

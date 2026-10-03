@@ -20,6 +20,8 @@ const APP = {
   source: "gmail_mcp",
   apply_email: null,
   application_url: null,
+  min_experience_years: null,
+  has_job_description: false,
   eligibility: null,
   skill_gap: null,
   skill_gap_note: null,

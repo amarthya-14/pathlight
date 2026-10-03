@@ -5,10 +5,11 @@ outside of tests. Accepts either raw text directly or a reference to a previousl
 uploaded Document, read via MCP rather than the API layer reaching into disk itself.
 """
 from beanie import PydanticObjectId
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 
 from app.api.deps import get_current_user
-from app.graphs.opportunity_pipeline import run_opportunity_pipeline
+from app.core.usage import consume_or_429, friendly_llm_error
+from app.graphs.opportunity_pipeline import run_opportunity_pipeline, tailor_in_background
 from app.mcp.filesystem_client import mcp_read_document
 from app.models.document import Document
 from app.models.opportunity import Company, Opportunity
@@ -19,7 +20,9 @@ router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
 
 
 @router.post("/ingest", response_model=IngestResponse, status_code=status.HTTP_200_OK)
-async def ingest_opportunity(payload: IngestRequest, current_user: User = Depends(get_current_user)):
+async def ingest_opportunity(
+    payload: IngestRequest, background: BackgroundTasks, current_user: User = Depends(get_current_user)
+):
     if not payload.raw_text and not payload.document_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -57,17 +60,21 @@ async def ingest_opportunity(payload: IngestRequest, current_user: User = Depend
         raw_text = payload.raw_text
         source = payload.source
 
-    result = await run_opportunity_pipeline(raw_text, source, str(current_user.id))
+    await consume_or_429(current_user.id, "analyse")
+    result = await run_opportunity_pipeline(raw_text, source, str(current_user.id), defer_tailor=True)
 
     if result.get("needs_human_review"):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Could not process this opportunity automatically: {result.get('error')}",
+            detail=f"Could not process this opportunity automatically: {friendly_llm_error(result.get('error') or '')}",
         )
 
     opportunity = await Opportunity.get(PydanticObjectId(result["opportunity_id"]))
     company = await Company.get(opportunity.company_id)
     extraction = result["extraction"]
+
+    if result.get("tailor_deferred"):
+        background.add_task(tailor_in_background, result["application_id"])
 
     return IngestResponse(
         opportunity_id=result["opportunity_id"],

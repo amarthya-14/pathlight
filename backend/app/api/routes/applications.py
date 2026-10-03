@@ -17,22 +17,28 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.agents.schemas import EligibilityDecision
 from app.api.deps import get_current_user
+from app.core.application_kit import build_answers, referral_kit
+from app.core.ats import has_skill, score_resume
+from app.core.usage import consume_or_429, friendly_llm_error
 from app.core.resume_pdf import render_resume_pdf
+from app.models.user import Profile
 from app.graphs.opportunity_pipeline import NO_RESUME_NOTE, latest_resume, recheck_application, tailor_application
 from app.integrations.google_oauth import get_gmail_integration
 from app.mcp.gmail_client import mcp_send_application_email
 from app.models.application import REVIEW_DECIDED_STAGES, Application, ApplicationStage, ApplicationStatusEvent
 from app.models.document import Document
-from app.models.opportunity import Company, Opportunity
+from app.models.opportunity import Company, Opportunity, OpportunityRequirements
 from app.models.tailored_resume import TailoredResume
 from app.models.user import User
 from app.retrieval.vector_store import user_has_indexed_resume
 from app.schemas.application import (
+    ApplicationKitOut,
     ApplicationOut,
     RecheckRequest,
     ReviewRequest,
     ReviewResponse,
     StatusUpdateRequest,
+    TailoredEditRequest,
     TailoredResumeOut,
 )
 
@@ -59,6 +65,11 @@ def build_application_out(application: Application, opportunity: Opportunity | N
         application_url=(
             opportunity.requirements.application_url if opportunity and opportunity.requirements else None
         ),
+        min_experience_years=(
+            opportunity.requirements.min_experience_years if opportunity and opportunity.requirements else None
+        ),
+        # Alert digests give ~3 lines per job; a real JD is paragraphs.
+        has_job_description=bool(opportunity and opportunity.description and len(opportunity.description) > 400),
         eligibility=application.eligibility,
         skill_gap=application.skill_gap,
         skill_gap_note=note,
@@ -168,10 +179,12 @@ async def recheck(application_id: str, payload: RecheckRequest, current_user: Us
     """Re-checks eligibility/skill gap — optionally with the full job description pasted
     by the user, since job-alert emails rarely include real eligibility criteria."""
     application = await _get_owned_application(application_id, current_user)
+    if payload.job_description and payload.job_description.strip():
+        await consume_or_429(current_user.id, "analyse")
     try:
         application = await recheck_application(application, payload.job_description)
     except RuntimeError as e:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Couldn't re-check: {e}")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Couldn't re-check: {friendly_llm_error(e)}")
     return await _application_out(application, current_user)
 
 
@@ -192,6 +205,8 @@ async def tailor_application_now(application_id: str, current_user: User = Depen
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=NO_RESUME_NOTE)
 
     tailored, note = await tailor_application(application, application.skill_gap)
+    if tailored is None and note and "today's" in note:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=note)
     if tailored is None:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=note)
     return await _tailored_out(tailored, current_user)
@@ -241,6 +256,41 @@ def _attachment_filename(user: User, role: str) -> str:
     return f"{safe[:80] or 'Resume'}.pdf"
 
 
+@router.put("/{application_id}/tailored-resume", response_model=TailoredResumeOut)
+async def edit_tailored_resume(
+    application_id: str, payload: TailoredEditRequest, current_user: User = Depends(get_current_user)
+):
+    """The student's own edits to the tailored resume / cover note, before applying. It's
+    their resume, so nothing is blocked — but the ATS score is recomputed, and a skill the
+    original resume never showed gets a gentle 'make sure this is true' note."""
+    application = await _get_owned_application(application_id, current_user)
+    if any(e.stage in REVIEW_DECIDED_STAGES for e in application.status_history):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This application was already sent or skipped.")
+    tailored = await TailoredResume.find_one(TailoredResume.application_id == application.id)
+    if tailored is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No tailored resume to edit yet.")
+
+    opportunity = await Opportunity.get(application.opportunity_id)
+    requirements = (opportunity.requirements if opportunity else None) or OpportunityRequirements()
+    base = await Document.get(tailored.base_document_id)
+    base_text = base.extracted_text if base and base.extracted_text else ""
+
+    tailored.tailored_text = payload.tailored_text.strip()
+    tailored.cover_note = payload.cover_note.strip()
+    tailored.ats = score_resume(
+        tailored.tailored_text, opportunity.role if opportunity else "", requirements.required_skills,
+        requirements.preferred_skills, base_text,
+    ).as_dict()
+    candidates = list(requirements.required_skills) + list(requirements.preferred_skills)
+    added = [s for s in dict.fromkeys(candidates) if has_skill(tailored.tailored_text, s) and not has_skill(base_text, s)]
+    tailored.warnings = [w for w in tailored.warnings if not w.startswith("You added ")] + [
+        f"You added {s} — fine if it's true; you'll be asked about it in interviews." for s in added
+    ]
+    tailored.changes_summary = [c for c in tailored.changes_summary if c != "Edited by you"] + ["Edited by you"]
+    await tailored.save()
+    return await _tailored_out(tailored, current_user)
+
+
 @router.get("/{application_id}/tailored-resume.pdf")
 async def download_tailored_resume_pdf(application_id: str, current_user: User = Depends(get_current_user)):
     """The tailored resume exactly as reviewed, as a PDF — what "Apply on LinkedIn"
@@ -255,6 +305,31 @@ async def download_tailored_resume_pdf(application_id: str, current_user: User =
         content=render_resume_pdf(tailored.tailored_text, title=filename[:-4]),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{application_id}/kit", response_model=ApplicationKitOut)
+async def application_kit(application_id: str, current_user: User = Depends(get_current_user)):
+    """Ready-to-paste answers for the application form (LinkedIn screening questions etc.)
+    and a referral helper — all derived from the resume, profile and posting."""
+    application = await _get_owned_application(application_id, current_user)
+    opportunity = await Opportunity.get(application.opportunity_id)
+    company = await Company.get(opportunity.company_id) if opportunity else None
+    profile = await Profile.find_one(Profile.user_id == current_user.id)
+    resume = await latest_resume(str(current_user.id))
+    tailored = await TailoredResume.find_one(TailoredResume.application_id == application.id)
+    requirements = opportunity.requirements if opportunity else None
+    posting_skills = (list(requirements.required_skills) + list(requirements.preferred_skills)) if requirements else []
+    name = current_user.full_name or current_user.email.split("@")[0]
+    resume_text = (tailored.tailored_text if tailored else None) or (resume.extracted_text if resume else "") or ""
+    answers = build_answers(resume_text, profile, name, posting_skills, tailored.cover_note if tailored else None)
+    matched = application.skill_gap.matched if application.skill_gap else []
+    referral = referral_kit(name, profile, company.name if company else "the company", opportunity.role if opportunity else "", matched)
+    return ApplicationKitOut(
+        answers=[a.as_dict() for a in answers],
+        connection_note=referral["connection_note"],
+        referral_message=referral["message"],
+        search_links=referral["search_links"],
     )
 
 

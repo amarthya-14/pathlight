@@ -69,3 +69,4 @@ fpdf2==2.8.9
 # download — LinkedIn's upload accepts PDF/DOCX, not .txt). Pure Python. Its core fonts are
 # Latin-1 only, so app/assets/fonts/ vendors DejaVu Sans (free license, see LICENSE_DEJAVU
 # there) for real-world resume text ("—", "•", "₹", accented names).
+pdfplumber==0.11.10

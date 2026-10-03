@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { reviewMock, downloadMock, markAppliedMock, saveBlobMock } = vi.hoisted(() => ({
+const { reviewMock, downloadMock, markAppliedMock, saveBlobMock, editMock } = vi.hoisted(() => ({
+  editMock: vi.fn(),
   reviewMock: vi.fn(),
   downloadMock: vi.fn(),
   markAppliedMock: vi.fn(),
@@ -13,7 +14,7 @@ vi.mock("@/lib/api", async () => {
   return {
     ...actual,
     saveBlob: saveBlobMock,
-    api: { reviewApplication: reviewMock, downloadTailoredResumePdf: downloadMock, markApplied: markAppliedMock },
+    api: { reviewApplication: reviewMock, downloadTailoredResumePdf: downloadMock, markApplied: markAppliedMock, editTailoredResume: editMock },
   };
 });
 
@@ -31,6 +32,8 @@ function makeApp(overrides: Partial<ApplicationOut> = {}): ApplicationOut {
     source: "gmail_mcp",
     apply_email: "jobs@acme.dev",
     application_url: null,
+    min_experience_years: null,
+    has_job_description: false,
     eligibility: null,
     skill_gap: null,
     skill_gap_note: null,
@@ -50,6 +53,7 @@ const TAILORED: TailoredResumeOut = {
   skills_emphasized: ["Python"],
   confidence: 0.8,
   warnings: ["Posting requires Kubernetes — not on your resume, so it was not added."],
+  ats: null,
   generated_at: "2026-10-01T00:00:00Z",
 };
 
@@ -167,5 +171,35 @@ describe("FinishApplyPanel", () => {
     expect(markAppliedMock).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText("I've submitted it on LinkedIn"));
     await waitFor(() => expect(onMarked).toHaveBeenCalledWith({ id: "app1" }));
+  });
+
+  it("shows the ATS score and names the skills that cap it instead of claiming them", () => {
+    const ats = {
+      score: 94,
+      breakdown: { keywords: 39, job_title: 5, sections: 15, contact: 10, format: 15, impact: 10 },
+      matched_keywords: ["Java"],
+      fixable_keywords: [],
+      missing_keywords: ["Kafka", "Microservices"],
+      blocked_points: 6,
+      suggestions: [],
+    };
+    render(<ReviewApplyCard application={makeApp()} tailored={{ ...TAILORED, ats }} onReviewed={() => {}} />);
+
+    expect(screen.getByText("Best honest score")).toBeInTheDocument();
+    expect(screen.getByText(/6 points need skills that aren.t on your resume/)).toBeInTheDocument();
+    expect(screen.getByText(/Kafka, Microservices/)).toBeInTheDocument();
+  });
+
+  it("lets the student edit the tailored resume and shows the re-scored result", async () => {
+    const onChange = vi.fn();
+    editMock.mockResolvedValue({ ...TAILORED, tailored_text: "Name\nSkills: Python, Django" });
+    render(<ReviewApplyCard application={makeApp()} tailored={TAILORED} onReviewed={() => {}} onTailoredChange={onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Edit/ }));
+    fireEvent.change(screen.getByLabelText("Tailored resume"), { target: { value: "Name\nSkills: Python, Django" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save edits/ }));
+
+    await waitFor(() => expect(editMock).toHaveBeenCalledWith("app1", "Name\nSkills: Python, Django", TAILORED.cover_note));
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
   });
 });

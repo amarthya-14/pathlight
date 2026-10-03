@@ -1,11 +1,11 @@
-# Gate 11: wakes the free-tier backend (Render sleeps after 15 min idle) and triggers the
-# Gmail job-alert poll. Needs repo secrets BACKEND_URL and CRON_SECRET (same value as the
+# Daily worker trigger: wakes the free-tier backend (Render sleeps after 15 min idle) and runs
+# the Gmail job-alert poll and Autopilot (both only act on users that are due today). Needs repo secrets BACKEND_URL and CRON_SECRET (same value as the
 # Render env var). See docs/DEPLOYMENT.md.
 name: Gmail poll
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "30 3 * * *" # daily, 09:00 IST
   workflow_dispatch:
 
 jobs:

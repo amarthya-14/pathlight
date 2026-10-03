@@ -13,7 +13,9 @@ class Settings(BaseSettings):
     # Auth
     JWT_SECRET: str = "changeme"
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24h — fine for dev/demo, revisit for prod
+    # 30 days: students open Pathlight a few times a week; a daily re-login was the most
+    # common friction. Tokens are stateless, so "log out everywhere" = rotate JWT_SECRET.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30
 
     # File storage (sandboxed document uploads — see app/mcp/sandbox.py)
     UPLOADS_ROOT: str = "./data/uploads"
@@ -87,7 +89,8 @@ class Settings(BaseSettings):
     # a silent fallback to plaintext storage.
     TOKEN_ENCRYPTION_KEY: str = ""
     GMAIL_POLL_ENABLED: bool = True
-    GMAIL_POLL_INTERVAL_SECONDS: int = 900
+    # Once a day: alert digests arrive daily, and every job costs LLM quota (free tier).
+    GMAIL_POLL_INTERVAL_SECONDS: int = 86400
     # Inspection-based starting allowlist, NOT a validated list (see
     # docs/AUTONOMOUS_APPLICATIONS.md §10) — comma-separated sender addresses whose mail
     # is treated as a job alert. Anything else in the inbox is never read by the poller.
@@ -95,6 +98,30 @@ class Settings(BaseSettings):
         "jobalerts-noreply@linkedin.com,jobs-noreply@linkedin.com,"
         "noreply@naukri.com,info@naukri.com,naukrialerts@naukri.com"
     )
+
+    # Job aggregators with official APIs (app/sources/job_boards.py) — the main source of
+    # fresher roles in India. Both free; each source is skipped while its key is unset.
+    # Adzuna: developer.adzuna.com (instant). Jooble: jooble.org/api/about (emailed).
+    ADZUNA_APP_ID: str = ""
+    ADZUNA_APP_KEY: str = ""
+    JOOBLE_API_KEY: str = ""
+
+    # "Continue with Google" sign-in (app/integrations/google_login.py). Defaults to the
+    # Gmail OAuth client; production should use a separate, PUBLISHED client (non-sensitive
+    # scopes need no verification), so sign-in isn't limited to Gmail's test users.
+    GOOGLE_LOGIN_CLIENT_ID: str = ""
+    GOOGLE_LOGIN_CLIENT_SECRET: str = ""
+    GOOGLE_LOGIN_REDIRECT_URI: str = ""  # default: <backend>/api/auth/google/callback
+
+    # Outgoing email for password resets (app/core/mailer.py). Optional.
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""  # e.g. "Pathlight <pathlight.app@gmail.com>"
+
+    # Comma-separated emails that can open the admin page (/admin).
+    ADMIN_EMAILS: str = ""
 
     model_config = SettingsConfigDict(env_file="../.env", env_file_encoding="utf-8", extra="ignore")
 

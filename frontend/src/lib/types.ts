@@ -7,6 +7,7 @@ export type UserOut = {
   id: string;
   email: string;
   full_name: string | null;
+  is_admin?: boolean;
 };
 
 export type ProfileOut = {
@@ -16,6 +17,16 @@ export type ProfileOut = {
   branch: string | null;
   github_username: string | null;
   experience_years: number | null;
+  college: string | null;
+  graduation_year: number | null;
+  target_roles: string[];
+  preferred_locations: string[];
+  open_to_remote: boolean;
+  expected_ctc_lpa: number | null;
+  notice_period: string | null;
+  autopilot_enabled: boolean;
+  autopilot_min_match: number;
+  autopilot_last_run: string | null;
 };
 
 export type ProfileUpsert = {
@@ -23,6 +34,15 @@ export type ProfileUpsert = {
   branch: string | null;
   github_username: string | null;
   experience_years?: number | null;
+  college?: string | null;
+  graduation_year?: number | null;
+  target_roles?: string[];
+  preferred_locations?: string[];
+  open_to_remote?: boolean;
+  expected_ctc_lpa?: number | null;
+  notice_period?: string | null;
+  autopilot_enabled?: boolean;
+  autopilot_min_match?: number;
 };
 
 export type PostApplyStage = "OA" | "INTERVIEW" | "OFFER" | "REJECTED";
@@ -73,6 +93,8 @@ export type ApplicationOut = {
   source: string | null;
   apply_email: string | null;
   application_url: string | null;
+  min_experience_years: number | null;
+  has_job_description: boolean;
   eligibility: EligibilityResult | null;
   skill_gap: SkillGapResult | null;
   skill_gap_note: string | null;
@@ -154,7 +176,19 @@ export type TailoredResumeOut = {
   skills_emphasized: string[];
   confidence: number;
   warnings: string[];
+  ats: AtsReport | null;
   generated_at: string;
+};
+
+// backend/app/core/ats.py — deterministic ATS score of the tailored resume.
+export type AtsReport = {
+  score: number;
+  breakdown: Record<"keywords" | "job_title" | "sections" | "contact" | "format" | "impact", number>;
+  matched_keywords: string[];
+  fixable_keywords: string[];
+  missing_keywords: string[];
+  blocked_points: number;
+  suggestions: string[];
 };
 
 export type ReviewOutcome = "applied" | "manual_apply_required" | "skipped";
@@ -181,7 +215,55 @@ export type GmailSyncOut = {
   messages_seen: number;
   opportunities_ingested: number;
   skipped_already_processed: number;
+  skipped_not_relevant: number;
   failures: string[];
+};
+
+export type GmailSyncStatus = {
+  state: "idle" | "running" | "done" | "error";
+  started_at: string | null;
+  result: GmailSyncOut | null;
+  error: string | null;
+};
+
+// backend/app/api/routes/jobs.py — the job-board feed.
+export type JobFeedItem = {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  remote: boolean;
+  url: string;
+  source: string;
+  posted_at: string | null;
+  match: number;
+  matched_skills: string[];
+  missing_skills: string[];
+  reasons: string[];
+  min_experience: number | null;
+  entry_level: boolean;
+  tracked_application_id: string | null;
+};
+
+export type JobFeedOut = {
+  items: JobFeedItem[];
+  total_listings: number;
+  matching: number;
+  hidden: Record<"field" | "experience" | "batch" | "old" | "low_match" | "dismissed", number>;
+  refreshed_at: string | null;
+  refreshing: boolean;
+  personalized: boolean;
+  families: string[];
+  sources: number;
+};
+
+export type JobFeedParams = { q?: string; minMatch?: number; days?: number; includeExperienced?: boolean };
+
+export type ApplicationKit = {
+  answers: { question: string; answer: string; note: string }[];
+  connection_note: string;
+  referral_message: string;
+  search_links: { label: string; url: string }[];
 };
 
 export class ApiError extends Error {

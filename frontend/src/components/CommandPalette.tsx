@@ -3,18 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import {
-  ArrowRight,
-  Briefcase,
-  ClipboardList,
-  LayoutDashboard,
-  Mail,
-  Moon,
-  Plus,
-  Search,
-  Sun,
-  UserRound,
-} from "lucide-react";
+import { ArrowRight, Briefcase, ClipboardList, Compass, LayoutDashboard, Mail, Moon, Plus, Search, Sun, UserRound } from "lucide-react";
 import { api } from "@/lib/api";
 import { useTheme } from "@/lib/theme";
 import type { ApplicationOut } from "@/lib/types";
@@ -61,9 +50,10 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const items: Item[] = useMemo(() => {
     const nav: Item[] = [
       { id: "nav-dash", group: "Go to", label: "Dashboard", icon: LayoutDashboard, run: () => go("/dashboard") },
-      { id: "nav-opp", group: "Go to", label: "Opportunities", icon: Briefcase, run: () => go("/opportunities") },
+      { id: "nav-jobs", group: "Go to", label: "Jobs for you", icon: Compass, run: () => go("/jobs") },
+      { id: "nav-opp", group: "Go to", label: "Add a job", icon: Briefcase, run: () => go("/opportunities") },
       { id: "nav-apps", group: "Go to", label: "Applications", icon: ClipboardList, run: () => go("/applications") },
-      { id: "nav-int", group: "Go to", label: "Integrations", icon: Mail, run: () => go("/integrations") },
+      { id: "nav-int", group: "Go to", label: "Gmail alerts", icon: Mail, run: () => go("/integrations") },
       { id: "nav-prof", group: "Go to", label: "Profile", icon: UserRound, run: () => go("/profile") },
     ];
     const actions: Item[] = [

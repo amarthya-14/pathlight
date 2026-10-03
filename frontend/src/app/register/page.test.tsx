@@ -36,13 +36,14 @@ describe("RegisterPage", () => {
     mockUser = null;
   });
 
-  it("registers, logs in, and navigates home on success", async () => {
+  it("registers with the student's name, logs in, and starts onboarding", async () => {
     registerMock.mockResolvedValue({ id: "1", email: "student@example.com", full_name: null });
     loginMock.mockResolvedValue({ access_token: "tok", token_type: "bearer" });
     refreshMock.mockResolvedValue(undefined);
 
     const { container } = render(<RegisterPage />);
 
+    fireEvent.change(container.querySelector("input[name=full_name]")!, { target: { value: "Asha Rao" } });
     fireEvent.change(container.querySelector("input[type=email]")!, {
       target: { value: "student@example.com" },
     });
@@ -51,9 +52,9 @@ describe("RegisterPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Create account/ }));
 
-    await waitFor(() => expect(registerMock).toHaveBeenCalledWith("student@example.com", "supersecret"));
+    await waitFor(() => expect(registerMock).toHaveBeenCalledWith("student@example.com", "supersecret", "Asha Rao"));
     await waitFor(() => expect(loginMock).toHaveBeenCalledWith("student@example.com", "supersecret"));
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/dashboard"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/welcome"));
   });
 
   it("shows the ApiError detail message when registration fails (e.g. duplicate email)", async () => {
@@ -61,6 +62,7 @@ describe("RegisterPage", () => {
 
     const { container } = render(<RegisterPage />);
 
+    fireEvent.change(container.querySelector("input[name=full_name]")!, { target: { value: "Asha Rao" } });
     fireEvent.change(container.querySelector("input[type=email]")!, {
       target: { value: "student@example.com" },
     });

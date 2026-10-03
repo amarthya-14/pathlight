@@ -201,6 +201,129 @@ body {
   .stagger > *:nth-child(n + 7) { animation-delay: 0.26s; }
 }
 
+/* ── Motion ─────────────────────────────────────────────────────────────────────
+   One easing curve everywhere (fast out, long settle — what makes motion read as
+   "expensive" rather than bouncy), small distances, a touch of blur on entrances.
+   Nothing loops except loaders. All of it is disabled by prefers-reduced-motion below. */
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer components {
+  /* Route content entering. */
+  .page-enter { animation: page-in 0.55s var(--ease-out) both; }
+
+  /* Scroll reveal (components/Motion.tsx toggles .is-visible). */
+  .reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    filter: blur(6px);
+    transition: opacity 0.9s var(--ease-out), transform 0.9s var(--ease-out), filter 0.9s var(--ease-out);
+    transition-delay: var(--delay, 0ms);
+  }
+  .reveal.is-visible { opacity: 1; transform: none; filter: none; }
+
+  /* Children appear one after another once the parent is visible. */
+  .reveal-seq > * {
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.6s var(--ease-out), transform 0.6s var(--ease-out);
+  }
+  .reveal-seq.is-visible > * { opacity: 1; transform: none; }
+  .reveal-seq.is-visible > *:nth-child(1) { transition-delay: 0.15s; }
+  .reveal-seq.is-visible > *:nth-child(2) { transition-delay: 0.45s; }
+  .reveal-seq.is-visible > *:nth-child(3) { transition-delay: 0.75s; }
+  .reveal-seq.is-visible > *:nth-child(4) { transition-delay: 1.05s; }
+  .reveal-seq.is-visible > *:nth-child(5) { transition-delay: 1.35s; }
+  .reveal-seq.is-visible > *:nth-child(n + 6) { transition-delay: 1.6s; }
+
+  /* Headline words rising out of a mask, staggered by --i. */
+  .word-rise { display: inline-block; overflow: hidden; vertical-align: bottom; padding-bottom: 0.08em; margin-bottom: -0.08em; }
+  .word-rise > span {
+    display: inline-block;
+    animation: word-in 0.9s var(--ease-out) both;
+    animation-delay: calc(var(--i, 0) * 70ms + 80ms);
+  }
+
+  /* Cards that respond to the pointer: a 2px lift and a deeper shadow. */
+  .lift { transition: transform 0.35s var(--ease-out), box-shadow 0.35s var(--ease-out), border-color 0.2s ease; }
+  .lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--line-strong); }
+
+  /* Logo: steps light up in sequence. */
+  .brand-animate .brand-step { animation: step-in 0.6s var(--ease-out) backwards; }
+  .brand-animate .brand-step:nth-of-type(2) { animation-delay: 0.08s; }
+  .brand-animate .brand-step:nth-of-type(3) { animation-delay: 0.2s; }
+  .brand-animate .brand-step:nth-of-type(4) { animation-delay: 0.32s; }
+
+  /* Loader: the steps climb on repeat. */
+  .brand-loading .brand-step { animation: step-climb 1.4s ease-in-out infinite; }
+  .brand-loading .brand-step:nth-of-type(3) { animation-delay: 0.18s; }
+  .brand-loading .brand-step:nth-of-type(4) { animation-delay: 0.36s; }
+
+  /* Endless, edge-faded strip (landing: where jobs come from). */
+  .marquee {
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  }
+  .marquee-track { animation: marquee 40s linear infinite; }
+  .marquee:hover .marquee-track { animation-play-state: paused; }
+
+  /* Score ring (ATS) fills in. */
+  .ring-progress { transition: stroke-dashoffset 1.4s var(--ease-out) 0.15s; }
+
+  /* Running state: a hairline sweep across the top of a card. */
+  .sweep { position: relative; overflow: hidden; }
+  .sweep::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto auto 0;
+    height: 2px;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: progress-indeterminate 1.4s ease-in-out infinite;
+  }
+}
+
+@layer components {
+  .step-forward { animation: step-forward 0.6s var(--ease-out) both; }
+  .step-back { animation: step-back 0.6s var(--ease-out) both; }
+}
+@keyframes step-forward {
+  from { opacity: 0; transform: translateX(24px); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@keyframes step-back {
+  from { opacity: 0; transform: translateX(-24px); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@layer components {
+  /* Landing product shot: tilts up into place, once. */
+  .hero-window { animation: hero-window 1.4s var(--ease-out) 0.35s both; transform-origin: 50% 0%; }
+}
+@keyframes hero-window {
+  from { opacity: 0; transform: translateY(40px) rotateX(14deg) scale(0.97); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(8px); filter: blur(3px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@keyframes word-in {
+  from { opacity: 0; transform: translateY(105%); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@keyframes step-in {
+  from { opacity: 0; transform: translate(-3px, 3px); }
+}
+@keyframes step-climb {
+  0%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
@@ -263,6 +386,8 @@ details > summary::-webkit-details-marker {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .reveal, .reveal-seq > * { opacity: 1 !important; transform: none !important; filter: none !important; }
+  .marquee-track { animation: none !important; }
   *,
   *::before,
   *::after {

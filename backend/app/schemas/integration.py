@@ -27,4 +27,12 @@ class GmailSyncOut(BaseModel):
     messages_seen: int
     opportunities_ingested: int
     skipped_already_processed: int
+    skipped_not_relevant: int = 0
     failures: list[str]
+
+
+class GmailSyncStatus(BaseModel):
+    state: str  # idle | running | done | error
+    started_at: datetime | None = None
+    result: GmailSyncOut | None = None
+    error: str | None = None

@@ -8,6 +8,7 @@ import {
   ExternalLink,
   FileText,
   Mail,
+  PenLine,
   Send,
   ShieldCheck,
   SkipForward,
@@ -15,9 +16,10 @@ import {
 } from "lucide-react";
 import { api, ApiError, saveBlob } from "@/lib/api";
 import { diffLines } from "@/lib/diff";
-import type { ApplicationOut, ReviewResponse, TailoredResumeOut } from "@/lib/types";
+import type { ApplicationOut, AtsReport, ReviewResponse, TailoredResumeOut } from "@/lib/types";
+import { ScoreRing } from "./Motion";
 import { ConfidenceBar } from "./ConfidenceBar";
-import { Button, buttonClasses, Card } from "./ui";
+import { Button, buttonClasses, Card, cx, TextArea } from "./ui";
 
 export function applySiteLabel(url: string | null): string {
   if (!url) return "the posting site";
@@ -40,6 +42,73 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+const ATS_PARTS: { key: keyof AtsReport["breakdown"]; label: string; max: number }[] = [
+  { key: "keywords", label: "Keywords from the posting", max: 45 },
+  { key: "sections", label: "Standard sections", max: 15 },
+  { key: "format", label: "ATS-readable format", max: 15 },
+  { key: "contact", label: "Contact & links", max: 10 },
+  { key: "impact", label: "Action-led bullets", max: 10 },
+  { key: "job_title", label: "Target job title", max: 5 },
+];
+
+// The tailored resume's ATS score, with the honest ceiling spelled out: points that
+// need skills the user doesn't have are named, never earned by inventing them.
+export function AtsPanel({ ats, onDownload }: { ats: AtsReport; onDownload?: () => void }) {
+  const ceiling = 100 - ats.blocked_points;
+  const atCeiling = ats.score >= ceiling;
+  const tone = ats.score >= 90 ? "ok" : ats.score >= 75 ? "accent" : "warn";
+  return (
+    <div className="grid gap-5 rounded-xl border border-line bg-surface-2/60 p-4 sm:grid-cols-[auto_1fr] sm:p-5">
+      <div className="flex items-center gap-4 sm:flex-col sm:items-center sm:gap-2">
+        <ScoreRing value={ats.score} size={84} stroke={7} tone={tone} label="ATS" />
+        <div className="text-[13px] sm:text-center">
+          <div className="font-semibold text-fg">{ats.score === 100 ? "Perfect match" : atCeiling ? "Best honest score" : "Room to improve"}</div>
+          {onDownload && (
+            <button onClick={onDownload} className="mt-0.5 text-xs text-muted underline-offset-4 hover:text-fg hover:underline">
+              Download PDF
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="min-w-0">
+        <div className="space-y-2">
+          {ATS_PARTS.map(({ key, label, max }) => {
+            const value = ats.breakdown[key] ?? 0;
+            return (
+              <div key={key} className="flex items-center gap-3 text-[12.5px]">
+                <span className="w-40 shrink-0 truncate text-muted">{label}</span>
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-hover">
+                  <div
+                    className={cx("h-full rounded-full transition-[width] duration-1000", value >= max ? "bg-ok" : "bg-accent")}
+                    style={{ width: `${(value / max) * 100}%`, transitionTimingFunction: "var(--ease-out)" }}
+                  />
+                </div>
+                <span className="w-11 text-right font-medium tabular-nums text-fg">
+                  {value}/{max}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        {ats.missing_keywords.length > 0 && (
+          <p className="mt-3 text-[12.5px] leading-relaxed text-muted">
+            <span className="font-medium text-fg">{ats.blocked_points} points need skills that aren&apos;t on your resume</span> —{" "}
+            {ats.missing_keywords.join(", ")}. Pathlight won&apos;t claim them for you; learn them (see your prep plan) and
+            re-tailor to reach {Math.min(100, ats.score + ats.blocked_points)}.
+          </p>
+        )}
+        {!atCeiling && ats.suggestions.length > 0 && (
+          <ul className="mt-3 space-y-1 text-[12.5px] text-muted">
+            {ats.suggestions.map((s) => (
+              <li key={s}>• {s}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Gate 10 human review gate (docs/AUTONOMOUS_APPLICATIONS.md §8). Shows exactly what
 // would be sent — the resume diff, the cover note, the destination — and never advances
 // on its own: sending needs Approve AND an explicit confirm naming the recipient.
@@ -47,12 +116,36 @@ export function ReviewApplyCard({
   application,
   tailored,
   onReviewed,
+  onTailoredChange,
 }: {
   application: ApplicationOut;
   tailored: TailoredResumeOut;
   onReviewed: (response: ReviewResponse) => void;
+  onTailoredChange?: (t: TailoredResumeOut) => void;
 }) {
   const [tab, setTab] = useState<"resume" | "cover">("resume");
+  const [editing, setEditing] = useState(false);
+  const [draftResume, setDraftResume] = useState(tailored.tailored_text);
+  const [draftCover, setDraftCover] = useState(tailored.cover_note);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const startEditing = () => {
+    setDraftResume(tailored.tailored_text);
+    setDraftCover(tailored.cover_note);
+    setEditing(true);
+  };
+  const saveEdits = async () => {
+    setSavingEdit(true);
+    setError(null);
+    try {
+      onTailoredChange?.(await api.editTailoredResume(application.id, draftResume, draftCover));
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Couldn't save your edits");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
   const [onlyChanges, setOnlyChanges] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [submitting, setSubmitting] = useState<"approve" | "skip" | null>(null);
@@ -135,6 +228,19 @@ export function ReviewApplyCard({
       </div>
 
       <div className="space-y-3 px-5">
+        {tailored.ats && (
+          <AtsPanel
+            ats={tailored.ats}
+            onDownload={async () => {
+              try {
+                const { blob, filename } = await api.downloadTailoredResumePdf(application.id);
+                saveBlob(blob, filename);
+              } catch (err) {
+                setError(err instanceof ApiError ? err.detail : "Download failed");
+              }
+            }}
+          />
+        )}
         <div className="flex items-center gap-2 text-[13px] text-ok">
           <ShieldCheck size={14} className="shrink-0" /> Checked: this resume claims no skill that isn&apos;t on your
           original.
@@ -182,17 +288,47 @@ export function ReviewApplyCard({
               </button>
             ))}
           </div>
-          {tab === "resume" && lines && (
+          <div className="flex items-center gap-3">
+          {onTailoredChange && !editing && (
+            <button onClick={startEditing} className="flex items-center gap-1 text-xs font-medium text-muted hover:text-fg">
+              <PenLine size={12} /> Edit
+            </button>
+          )}
+          {tab === "resume" && lines && !editing && (
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted">
               <input type="checkbox" className="h-3.5 w-3.5 accent-[var(--ink)]" checked={onlyChanges} onChange={(e) => setOnlyChanges(e.target.checked)} />
               Only changes
             </label>
           )}
+          </div>
         </div>
+
+        {editing && (
+          <div className="animate-fade-in space-y-3 bg-surface-2 p-4">
+            <TextArea
+              aria-label="Tailored resume"
+              rows={18}
+              value={tab === "resume" ? draftResume : draftCover}
+              onChange={(e) => (tab === "resume" ? setDraftResume(e.target.value) : setDraftCover(e.target.value))}
+              className="font-mono text-[12.5px]"
+            />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-subtle">Your words, your call — the ATS score is re-checked when you save.</p>
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={savingEdit}>
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={saveEdits} loading={savingEdit}>
+                  Save edits
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div
           data-testid="resume-diff"
-          className={`max-h-[440px] overflow-auto bg-surface-2 py-3 font-mono text-[12px] leading-[1.7] ${tab === "resume" ? "" : "hidden"}`}
+          className={`max-h-[440px] overflow-auto bg-surface-2 py-3 font-mono text-[12px] leading-[1.7] ${tab === "resume" && !editing ? "" : "hidden"}`}
         >
           {visibleLines ? (
             visibleLines.map((line, i) => (
@@ -217,7 +353,7 @@ export function ReviewApplyCard({
             <div className="whitespace-pre-wrap px-5 text-fg">{tailored.tailored_text}</div>
           )}
         </div>
-        <div className={`max-h-[440px] overflow-auto whitespace-pre-wrap bg-surface-2 px-5 py-4 text-sm leading-relaxed text-fg ${tab === "cover" ? "" : "sr-only"}`}>
+        <div className={`max-h-[440px] overflow-auto whitespace-pre-wrap bg-surface-2 px-5 py-4 text-sm leading-relaxed text-fg ${tab === "cover" && !editing ? "" : "sr-only"}`}>
           {tailored.cover_note}
         </div>
       </div>
@@ -307,7 +443,7 @@ export function FinishApplyPanel({
   const steps = [
     `Open the job on ${site} and click Apply.`,
     "Upload your tailored resume PDF from Downloads.",
-    "Paste the cover note into any message field.",
+    "Screening questions? Copy honest answers from the Application kit below.",
     `Submit on ${site}, then confirm below.`,
   ];
 

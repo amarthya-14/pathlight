@@ -24,6 +24,7 @@ import type { ApplicationOut, PostApplyStage, ReviewResponse, TailoredResumeOut 
 import { JOURNEY, STAGE_META, daysUntil, deadlineLabel, deadlineTone, journeyIndex } from "@/lib/stages";
 import { EligibilityCard } from "@/components/EligibilityCard";
 import { applySiteLabel, FinishApplyPanel, ReviewApplyCard } from "@/components/ReviewApplyCard";
+import { ApplicationKitPanel } from "@/components/ApplicationKit";
 import { SkillGapCard } from "@/components/SkillGapCard";
 import { StatusTimeline } from "@/components/StatusTimeline";
 import { useToast } from "@/components/Toast";
@@ -118,11 +119,13 @@ function TrackProgress({ application, onUpdated }: { application: ApplicationOut
 function RecheckCard({
   application,
   onUpdated,
+  onRetailored,
   highlight,
   textareaRef,
 }: {
   application: ApplicationOut;
   onUpdated: (a: ApplicationOut) => void;
+  onRetailored: (t: TailoredResumeOut) => void;
   highlight: boolean;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
 }) {
@@ -135,11 +138,25 @@ function RecheckCard({
     setBusy(true);
     setError(null);
     try {
+      const withJd = Boolean(jd.trim());
       const updated = await api.recheckApplication(application.id, jd.trim() || undefined);
       onUpdated(updated);
       setJd("");
       const decision = updated.eligibility?.decision?.replace("_", " ") ?? "updated";
       toast("Eligibility re-checked", { description: `Result: ${decision}` });
+      // A real JD makes the tailored resume much better (ATS matches its wording), so
+      // re-tailor in the background when the user is still deciding.
+      const stage = updated.status_history[updated.status_history.length - 1]?.stage;
+      if (withJd && stage === "READY_TO_APPLY" && updated.eligibility?.decision !== "not_eligible") {
+        toast("Re-tailoring with the full description", { description: "Your resume will update here in a minute or two.", tone: "info" });
+        api
+          .tailorApplication(application.id)
+          .then((t) => {
+            onRetailored(t);
+            toast("Tailored resume updated", { description: t.ats ? `ATS score ${t.ats.score}/100` : undefined });
+          })
+          .catch(() => {});
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Re-check failed");
     } finally {
@@ -173,7 +190,7 @@ function RecheckCard({
 }
 
 export default function ApplicationDetailPage() {
-  const { user, loading: authLoading } = useRequireAuth();
+  const { user, profile, loading: authLoading } = useRequireAuth();
   const toast = useToast();
   const params = useParams<{ id: string }>();
   const [application, setApplication] = useState<ApplicationOut | null>(null);
@@ -193,6 +210,31 @@ export default function ApplicationDetailPage() {
     // 404 just means no tailored resume yet (no resume on file, not eligible, …).
     api.getTailoredResume(params.id).then(setTailored).catch(() => setTailored(null));
   }, [user, params.id]);
+
+  // Jobs added in the last few minutes are tailored in the background (the ATS loop takes
+  // 1-3 min). Show that instead of a "Generate" button that would run it a second time,
+  // and pick the result up when it lands.
+  const backgroundTailoring =
+    !!application &&
+    !tailored &&
+    Date.now() - new Date(application.created_at).getTime() < 5 * 60_000 &&
+    application.eligibility?.decision !== "not_eligible" &&
+    !application.status_history.some((e) => ["APPLIED", "SKIPPED_BY_USER", "MANUAL_APPLY_REQUIRED"].includes(e.stage));
+  useEffect(() => {
+    if (!backgroundTailoring) return;
+    const t = setInterval(async () => {
+      try {
+        const ready = await api.getTailoredResume(params.id);
+        setTailored(ready);
+        setApplication(await api.getApplication(params.id));
+        toast("Tailored resume ready", { description: ready.ats ? `ATS score ${ready.ats.score}/100` : undefined });
+      } catch {
+        // not ready yet
+      }
+    }, 8000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backgroundTailoring, params.id]);
 
   const onReviewed = (response: ReviewResponse) => {
     setApplication(response.application);
@@ -229,6 +271,9 @@ export default function ApplicationDetailPage() {
   const lastStage = application.status_history.at(-1)?.stage;
   const lastNote = application.status_history.at(-1)?.note;
   const stageMeta = lastStage ? STAGE_META[lastStage] : null;
+  const needsMoreExperience =
+    application.min_experience_years !== null &&
+    application.min_experience_years > (profile?.experience_years ?? 0) + 1;
   const decided = application.status_history.some((e) => ["APPLIED", "MANUAL_APPLY_REQUIRED", "SKIPPED_BY_USER"].includes(e.stage));
   const applied = application.status_history.some((e) => e.stage === "APPLIED");
   const notEligible = application.eligibility?.decision === "not_eligible";
@@ -305,8 +350,8 @@ export default function ApplicationDetailPage() {
                       </p>
                     </div>
                   </div>
-                  <Button onClick={onGenerateTailored} loading={tailoring} className="shrink-0">
-                    {tailoring ? "Tailoring… ~30s" : "Generate tailored resume"}
+                  <Button onClick={onGenerateTailored} loading={tailoring || backgroundTailoring} className="shrink-0">
+                    {backgroundTailoring ? "Tailoring in the background…" : tailoring ? "Tailoring… 1–2 min" : "Generate tailored resume"}
                   </Button>
                 </div>
                 {uncertain && (
@@ -343,6 +388,29 @@ export default function ApplicationDetailPage() {
             </Alert>
           )}
 
+          {!decided && needsMoreExperience && (
+            <Alert tone="bad" title={`This role asks for ${application.min_experience_years}+ years of experience`}>
+              You have {profile?.experience_years ? `${profile.experience_years} years` : "no full-time experience yet"}.
+              On LinkedIn this is usually a screening question that filters you out automatically — your time is better
+              spent on entry-level roles. If you still apply, answer the experience questions honestly (see the kit below).
+            </Alert>
+          )}
+
+          {!decided && !application.has_job_description && application.source === "gmail_mcp" && (
+            <Alert
+              tone="info"
+              title={`Check the full job on ${applySiteLabel(application.application_url)} first`}
+              action={
+                <button onClick={focusRecheck} className={buttonClasses("secondary", "sm")}>
+                  <FileSearch size={12} /> Paste it
+                </button>
+              }
+            >
+              Job alerts only include the title. Paste the description so Pathlight can check the experience it asks for
+              and re-tailor your resume to its exact wording (that&apos;s what ATS filters match on).
+            </Alert>
+          )}
+
           {lastStage === "READY_TO_APPLY" && tailored && (
             <section className="animate-fade-in">
               {uncertain && (
@@ -354,7 +422,7 @@ export default function ApplicationDetailPage() {
                   before you apply.
                 </Alert>
               )}
-              <ReviewApplyCard application={application} tailored={tailored} onReviewed={onReviewed} />
+              <ReviewApplyCard application={application} tailored={tailored} onReviewed={onReviewed} onTailoredChange={setTailored} />
             </section>
           )}
 
@@ -368,6 +436,13 @@ export default function ApplicationDetailPage() {
                   toast("Marked as applied", { description: "Good luck! Record interviews or offers here as they happen." });
                 }}
               />
+            </section>
+          )}
+
+          {(lastStage === "READY_TO_APPLY" || lastStage === "MANUAL_APPLY_REQUIRED") && (
+            <section className="animate-fade-in">
+              <SectionLabel>Application kit</SectionLabel>
+              <ApplicationKitPanel applicationId={application.id} site={applySiteLabel(application.application_url)} />
             </section>
           )}
 
@@ -414,14 +489,20 @@ export default function ApplicationDetailPage() {
         <aside className="space-y-4">
           {applied && <TrackProgress application={application} onUpdated={setApplication} />}
           {!decided && (
-            <RecheckCard application={application} onUpdated={setApplication} highlight={highlightRecheck} textareaRef={recheckRef} />
+            <RecheckCard
+              application={application}
+              onUpdated={setApplication}
+              onRetailored={setTailored}
+              highlight={highlightRecheck}
+              textareaRef={recheckRef}
+            />
           )}
           <Card className="p-4">
             <div className="text-[13px] font-medium text-fg">Details</div>
             <dl className="mt-3 space-y-2.5 text-[13px]">
               <div className="flex justify-between gap-3">
                 <dt className="text-subtle">Source</dt>
-                <dd className="text-right text-fg">{application.source === "gmail_mcp" ? "Gmail job alert" : "Added by you"}</dd>
+                <dd className="text-right text-fg">{application.source === "gmail_mcp" ? "Gmail job alert" : application.source?.startsWith("web:") ? "Company job board" : "Added by you"}</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="text-subtle">Deadline</dt>
