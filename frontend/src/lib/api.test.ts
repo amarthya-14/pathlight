@@ -139,3 +139,12 @@ describe("api.request", () => {
     expect(getToken()).toBe("new-token");
   });
 });
+
+describe("api.request network failures", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("turns a network error into a clear 'can't reach the server' ApiError", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    await expect(api.me()).rejects.toMatchObject({ status: 0, detail: expect.stringContaining("Can't reach the Pathlight server") });
+  });
+});

@@ -21,6 +21,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const TOKEN_KEY = "pathlight_token";
 
+export const UNREACHABLE =
+  "Can't reach the Pathlight server right now. If it was idle, it may be waking up — try again in a minute.";
+
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(TOKEN_KEY);
@@ -58,7 +61,14 @@ async function request<T>(
     requestBody = JSON.stringify(body);
   }
 
-  const res = await fetch(`${API_URL}${path}`, { method, headers, body: requestBody });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { method, headers, body: requestBody });
+  } catch {
+    // Network-level failure (server down/asleep, wrong NEXT_PUBLIC_API_URL, CORS) — say
+    // so plainly instead of a generic "failed" that sends people hunting for a form error.
+    throw new ApiError(0, UNREACHABLE);
+  }
 
   if (!res.ok) {
     let detail = res.statusText;
