@@ -49,9 +49,19 @@ async def used_today(user_id, kind: str) -> int:
     return row.used if row else 0
 
 
+# Students who added their own Gemini key spend their own quota, so they get more.
+OWN_KEY_MULTIPLIER = 4
+
+
+def limit_for(kind: str) -> int:
+    from app.agents.llm_client import using_own_key  # local: llm_client imports nothing from here
+
+    return DAILY_LIMITS[kind] * (OWN_KEY_MULTIPLIER if using_own_key() and kind != "autopilot" else 1)
+
+
 async def try_consume(user_id, kind: str) -> bool:
     """Atomically takes one unit of today's budget. False if the budget is spent."""
-    limit = DAILY_LIMITS[kind]
+    limit = limit_for(kind)
     uid = PydanticObjectId(str(user_id))
     day = today_ist()
     collection = UsageCounter.get_motor_collection()
@@ -75,8 +85,13 @@ async def consume_or_429(user_id, kind: str) -> None:
         what = {"analyse": "jobs analysed", "tailor": "tailored resumes", "autopilot": "autopilot runs"}[kind]
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"You've reached today's limit of {DAILY_LIMITS[kind]} {what}. It resets at midnight IST — "
-            "this keeps Pathlight free for every student.",
+            detail=f"You've reached today's limit of {limit_for(kind)} {what}. It resets at midnight IST. "
+            + (
+                "Add your own free AI key (e.g. Gemini) in Profile → Your AI keys to get "
+                f"{OWN_KEY_MULTIPLIER}x the daily limit."
+                if limit_for(kind) == DAILY_LIMITS[kind] and kind != "autopilot"
+                else "This keeps Pathlight free for every student."
+            ),
         )
 
 
@@ -85,7 +100,10 @@ def friendly_llm_error(error: Exception | str) -> str:
     text = str(error)
     low = text.lower()
     if "resource_exhausted" in low or "429" in low or "quota" in low:
-        return "Pathlight's AI has hit its daily limit (shared free quota). Please try again in a few hours."
+        return (
+            "Pathlight's AI has hit its daily limit (shared free quota). Try again in a few hours — or add your "
+            "own free AI key in Profile → Your AI keys so you never wait on the shared quota."
+        )
     if "unavailable" in low or "503" in low or "overloaded" in low:
         return "The AI service is busy right now. Please try again in a minute."
     if "fabrication_guard" in low:

@@ -39,7 +39,7 @@ from app.agents.schemas import EligibilityDecision, EligibilityResult, Extracted
 from app.agents.skill_gap import run_skill_gap
 from app.core.dedupe import role_hash as compute_role_hash
 from app.core.resume_links import drop_dead_anchors, extract_pdf
-from app.core.usage import DAILY_LIMITS, friendly_llm_error, try_consume
+from app.core.usage import friendly_llm_error, limit_for, try_consume
 from app.mcp.sandbox import resolve_safe_path
 from app.mcp.calendar_client import mcp_create_reminder
 from app.models.application import REVIEW_DECIDED_STAGES, Application, ApplicationStage, ApplicationStatusEvent
@@ -369,7 +369,7 @@ async def tailor_application(application: Application, skill_gap: SkillGapResult
 
     if not await try_consume(user_id, "tailor"):
         return None, (
-            f"You've used today's {DAILY_LIMITS['tailor']} tailored resumes — use “Generate tailored resume” "
+            f"You've used today's {limit_for('tailor')} tailored resumes — use “Generate tailored resume” "
             "tomorrow (the limit keeps Pathlight free for everyone)."
         )
 

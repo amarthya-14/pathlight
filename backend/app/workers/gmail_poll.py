@@ -26,6 +26,7 @@ from app.agents.discovery import run_digest_discovery
 from beanie import PydanticObjectId
 
 from app.graphs.opportunity_pipeline import latest_resume, run_opportunity_pipeline
+from app.agents.llm_client import llm_for_user
 from app.core.usage import try_consume
 from app.models.user import Profile
 from app.sources.job_matching import Student, alert_job_unfit, skills_in
@@ -66,6 +67,12 @@ def build_alert_query(first_poll: bool) -> str:
 
 
 async def poll_integration(integration: Integration) -> PollResult:
+    """Polls one user's Gmail once, with their own Gemini key (if any) for every AI call."""
+    async with llm_for_user(integration.user_id):
+        return await _poll_integration(integration)
+
+
+async def _poll_integration(integration: Integration) -> PollResult:
     """Polls one user's Gmail once. Per-message failures are recorded and skipped (one
     unparseable digest must not block the rest); an auth failure stops this user's poll
     and is visible as Integration.status == "error"."""

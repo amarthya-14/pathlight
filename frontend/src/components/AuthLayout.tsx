@@ -5,7 +5,7 @@ import { BadgeCheck, Eye, EyeOff, Inbox, MousePointerClick, ScanSearch, Wand2 } 
 import { Brand } from "./Brand";
 import { ThemeToggle } from "./ThemeToggle";
 import { api, ApiError } from "@/lib/api";
-import { fieldClasses } from "./ui";
+import { fieldClasses, useFieldId } from "./ui";
 
 const STEPS = [
   { icon: Inbox, label: "New alert — SDE Intern at Acme" },
@@ -79,9 +79,10 @@ export function AuthLayout({
 
 export function PasswordInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   const [visible, setVisible] = useState(false);
+  const fieldId = useFieldId();
   return (
     <div className="relative">
-      <input {...props} type={visible ? "text" : "password"} className={`${fieldClasses} h-9 pr-10`} />
+      <input id={fieldId} {...props} type={visible ? "text" : "password"} className={`${fieldClasses} h-9 pr-10`} />
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}

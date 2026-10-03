@@ -1,3 +1,4 @@
+import { createContext, useContext, useId } from "react";
 import type {
   ButtonHTMLAttributes,
   CSSProperties,
@@ -101,11 +102,23 @@ export function Card({
 
 // ── Forms ───────────────────────────────────────────────────────────────────
 
+// Links a Field's <label> to the TextInput/TextArea inside it (htmlFor/id), so screen
+// readers announce the label and clicking it focuses the input.
+const FieldContext = createContext<string | undefined>(undefined);
+
+/** The id of the enclosing Field's input — for custom inputs built outside ui.tsx. */
+export function useFieldId(): string | undefined {
+  return useContext(FieldContext);
+}
+
 export function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  const id = useId();
   return (
     <div>
-      <label className="mb-1.5 block text-[13px] font-medium text-fg">{label}</label>
-      {children}
+      <label htmlFor={id} className="mb-1.5 block text-[13px] font-medium text-fg">
+        {label}
+      </label>
+      <FieldContext.Provider value={id}>{children}</FieldContext.Provider>
       {hint && <p className="mt-1.5 text-xs leading-relaxed text-subtle">{hint}</p>}
     </div>
   );
@@ -115,12 +128,14 @@ export const fieldClasses =
   "w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm text-fg shadow-xs placeholder:text-subtle transition-[border-color,box-shadow] focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/15 disabled:opacity-60";
 
 export function TextInput(props: React.ComponentProps<"input">) {
-  return <input {...props} className={cx(fieldClasses, "h-9", props.className)} />;
+  const fieldId = useContext(FieldContext);
+  return <input id={fieldId} {...props} className={cx(fieldClasses, "h-9", props.className)} />;
 }
 
 // React 19: `ref` is a plain prop, so ComponentProps<"textarea"> lets callers pass one.
 export function TextArea(props: React.ComponentProps<"textarea">) {
-  return <textarea {...props} className={cx(fieldClasses, "resize-y leading-relaxed", props.className)} />;
+  const fieldId = useContext(FieldContext);
+  return <textarea id={fieldId} {...props} className={cx(fieldClasses, "resize-y leading-relaxed", props.className)} />;
 }
 
 export function Label(props: LabelHTMLAttributes<HTMLLabelElement>) {

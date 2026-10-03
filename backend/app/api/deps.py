@@ -9,6 +9,8 @@ from beanie import PydanticObjectId
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
+from app.agents.llm_client import set_user_keys
+from app.core.ai_providers import decrypt_keys
 from app.core.security import decode_access_token
 from app.models.user import User
 
@@ -31,4 +33,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
         raise credentials_exception
     if user is None:
         raise credentials_exception
+    # Every AI call made while serving this request (and its background tasks) tries the
+    # student's own provider keys first, if they added any — see app/agents/llm_client.py.
+    set_user_keys(decrypt_keys(user))
     return user

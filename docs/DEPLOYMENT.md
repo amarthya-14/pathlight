@@ -122,3 +122,13 @@ Limits built in: per-user daily AI budgets (`app/core/usage.py`: 25 analyses, 12
 resumes, 3 autopilot jobs) so one user can't exhaust the shared Gemini quota. If the strong
 model's free quota (~20/day/project) becomes the bottleneck, a billing-enabled key is the fix.
 
+### AI keys and fallbacks
+- Students can add their own key for Google Gemini (free, via Google AI Studio), Groq (free),
+  OpenAI, Anthropic Claude, or any OpenAI-compatible API in **Profile → Your AI keys**.
+  Keys are verified with the provider, stored encrypted (needs `TOKEN_ENCRYPTION_KEY`), and
+  tried first for that student's requests; they also get 4x the daily limits.
+- Every AI call falls back in order: the student's keys → `GOOGLE_API_KEY` →
+  `GOOGLE_API_KEYS` (extra shared keys) → the small model on each → `LLM_EXTRA_FALLBACK_MODELS`.
+- Resume embeddings always use Gemini (the stored vectors must come from one model): the
+  student's Gemini key if they added one, else the shared keys.
+

@@ -8,6 +8,18 @@ export type UserOut = {
   email: string;
   full_name: string | null;
   is_admin?: boolean;
+  ai_keys?: AiKeyOut[];
+};
+
+export type AiProviderId = "gemini" | "groq" | "openai" | "anthropic" | "custom";
+
+export type AiKeyOut = {
+  provider: AiProviderId;
+  last4: string;
+  strong_model: string;
+  small_model: string;
+  base_url: string | null;
+  added_at: string;
 };
 
 export type ProfileOut = {

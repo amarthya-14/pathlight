@@ -8,13 +8,26 @@ ResumeVersion models exist (Gate 3+), per DATABASE.md's confirmed entity list.
 from datetime import datetime, timezone
 
 from beanie import Document, Indexed, PydanticObjectId
-from pydantic import EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field
+
+
+class AiKey(BaseModel):
+    provider: str  # gemini | groq | openai | anthropic | custom
+    encrypted_key: str
+    last4: str
+    strong_model: str
+    small_model: str
+    base_url: str | None = None  # custom OpenAI-compatible providers
+    added_at: datetime
 
 
 class User(Document):
     email: Indexed(EmailStr, unique=True)
     hashed_password: str
     full_name: str | None = None
+    # The student's own AI provider keys (app/core/ai_providers.py), tried in this order
+    # before Pathlight's shared keys. Ciphertext only; never returned by the API.
+    ai_keys: list[AiKey] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

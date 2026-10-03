@@ -17,24 +17,43 @@ from functools import lru_cache
 
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
+from app.agents.llm_client import gemini_keys
 from app.core.config import settings
 
 
-@lru_cache
-def get_document_embedder() -> GoogleGenerativeAIEmbeddings:
+@lru_cache(maxsize=64)
+def _embedder(key: str, task_type: str) -> GoogleGenerativeAIEmbeddings:
+    return GoogleGenerativeAIEmbeddings(model=settings.EMBEDDING_MODEL, google_api_key=key, task_type=task_type)
+
+
+class FallbackEmbedder:
+    """Tries the student's own Gemini key(s), then each server key (app/agents/llm_client.py).
+    Same embedding model on every key, so vectors stay comparable whichever key made them."""
+
+    def __init__(self, task_type: str):
+        self.task_type = task_type
+
+    async def _run(self, method: str, arg):
+        last_error: Exception | None = None
+        for key in gemini_keys():
+            try:
+                return await getattr(_embedder(key, self.task_type), method)(arg)
+            except Exception as e:  # quota, overload, invalid key -> next key
+                last_error = e
+        raise last_error
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        return await self._run("aembed_documents", texts)
+
+    async def aembed_query(self, text: str) -> list[float]:
+        return await self._run("aembed_query", text)
+
+
+def get_document_embedder() -> FallbackEmbedder:
     """task_type=RETRIEVAL_DOCUMENT — used when embedding resume chunks to be stored."""
-    return GoogleGenerativeAIEmbeddings(
-        model=settings.EMBEDDING_MODEL,
-        google_api_key=settings.GOOGLE_API_KEY,
-        task_type="RETRIEVAL_DOCUMENT",
-    )
+    return FallbackEmbedder("RETRIEVAL_DOCUMENT")
 
 
-@lru_cache
-def get_query_embedder() -> GoogleGenerativeAIEmbeddings:
+def get_query_embedder() -> FallbackEmbedder:
     """task_type=RETRIEVAL_QUERY — used when embedding a skill name to search for matches."""
-    return GoogleGenerativeAIEmbeddings(
-        model=settings.EMBEDDING_MODEL,
-        google_api_key=settings.GOOGLE_API_KEY,
-        task_type="RETRIEVAL_QUERY",
-    )
+    return FallbackEmbedder("RETRIEVAL_QUERY")

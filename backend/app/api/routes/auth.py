@@ -192,7 +192,13 @@ async def reset_password(payload: ResetPasswordRequest):
 def _user_out(user: User) -> UserOut:
     from app.api.routes.admin import is_admin
 
-    return UserOut(id=user.id, email=user.email, full_name=user.full_name, is_admin=is_admin(user))
+    return UserOut(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        is_admin=is_admin(user),
+        ai_keys=[k.model_dump(exclude={"encrypted_key"}) for k in user.ai_keys],
+    )
 
 
 @router.get("/me", response_model=UserOut)

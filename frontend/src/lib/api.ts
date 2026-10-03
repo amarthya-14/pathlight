@@ -9,6 +9,8 @@ import type {
   IngestResponse,
   JobFeedOut,
   JobFeedParams,
+  AiKeyOut,
+  AiProviderId,
   ApplicationKit,
   IntegrationOut,
   PreparationPlanOut,
@@ -145,6 +147,12 @@ export const api = {
   exportAccount: () => requestFile("/api/account/export"),
   deleteAccount: (password?: string) =>
     request<void>("/api/account", { method: "DELETE", body: { confirm: "DELETE", password: password || null } }),
+  addAiKey: (payload: { provider: AiProviderId; api_key: string; base_url?: string | null; model?: string | null }) =>
+    request<{ ai_keys: AiKeyOut[]; message: string }>("/api/account/ai-keys", { method: "POST", body: payload }),
+  removeAiKey: (provider: AiProviderId) =>
+    request<{ ai_keys: AiKeyOut[]; message: string }>(`/api/account/ai-keys/${provider}`, { method: "DELETE" }),
+  reorderAiKeys: (order: AiProviderId[]) =>
+    request<{ ai_keys: AiKeyOut[]; message: string }>("/api/account/ai-keys/order", { method: "PUT", body: order }),
   adminStats: () => request<Record<string, unknown>>("/api/admin/stats"),
   editTailoredResume: (applicationId: string, tailoredText: string, coverNote: string) =>
     request<TailoredResumeOut>(`/api/applications/${applicationId}/tailored-resume`, {

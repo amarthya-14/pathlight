@@ -9,6 +9,7 @@ quota lasts. It never applies — approval stays with the student (docs/AUTONOMO
 """
 import logging
 
+from app.agents.llm_client import llm_for_user
 from app.core.usage import DAILY_LIMITS, today_ist, try_consume
 from app.models.job_listing import JobListing
 from app.models.user import Profile
@@ -51,7 +52,8 @@ async def run_autopilot_once() -> dict[str, int]:
             {"_id": profile.id}, {"$set": {"autopilot_last_run": today}}
         )
         try:
-            results[str(profile.user_id)] = await run_autopilot_for(profile)
+            async with llm_for_user(profile.user_id):
+                results[str(profile.user_id)] = await run_autopilot_for(profile)
         except Exception:
             logger.exception("autopilot failed for %s", profile.user_id)
     return results

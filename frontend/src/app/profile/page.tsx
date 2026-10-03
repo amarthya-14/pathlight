@@ -6,6 +6,7 @@ import { useRequireAuth } from "@/lib/auth-context";
 import { api, ApiError, saveBlob } from "@/lib/api";
 import type { DocumentOut, ProfileOut } from "@/lib/types";
 import { profilePayload } from "@/lib/profile";
+import { AiKeysCard } from "@/components/AiKeysCard";
 import { ChipPicker } from "@/components/Chips";
 import { useToast } from "@/components/Toast";
 import { Alert, Button, Card, Field, PageHeader, PageSkeleton, Progress, TextArea, TextInput } from "@/components/ui";
@@ -352,6 +353,8 @@ export default function ProfilePage() {
           )}
         </Section>
       </Card>
+
+      <AiKeysCard />
 
       <AutopilotCard profile={profile} onSaved={(p) => {
         setProfile(p);

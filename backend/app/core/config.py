@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     # reverting to a real pro-tier model for ambiguous-eligibility reasoning is a
     # one-line config change, not a code change.
     GOOGLE_API_KEY: str = ""
+    # Extra server keys (comma-separated, e.g. from other free-tier projects): tried after
+    # GOOGLE_API_KEY when it's out of quota. Students' own keys are tried before all of
+    # these (app/agents/llm_client.py).
+    GOOGLE_API_KEYS: str = ""
+    # Last-resort models after the strong and small ones, e.g. "gemini-2.5-flash".
+    LLM_EXTRA_FALLBACK_MODELS: str = ""
     LLM_MODEL_SMALL: str = "gemini-3.1-flash-lite"  # cheap/fast — Discovery Agent extraction
     LLM_MODEL_STRONG: str = "gemini-3.6-flash"  # stronger reasoning — ambiguous Eligibility cases
     EMBEDDING_MODEL: str = "gemini-embedding-001"  # GA text embedding model, verified current Sep 2026

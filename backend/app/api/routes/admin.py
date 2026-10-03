@@ -71,6 +71,7 @@ async def stats(_: User = Depends(require_admin)):
             "with_resume_profile": await Profile.find(Profile.target_roles != []).count(),
             "autopilot_on": await Profile.find(Profile.autopilot_enabled == True).count(),  # noqa: E712
             "gmail_connected": await Integration.find(Integration.status == "connected").count(),
+            "own_ai_key": await User.find({"ai_keys.0": {"$exists": True}}).count(),
             "gmail_errors": await Integration.find(Integration.status == "error").count(),
         },
         "funnel": {
