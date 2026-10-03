@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from app.core.config import check_production_settings, settings
 from app.core.db import init_db
@@ -75,3 +76,10 @@ app.include_router(integrations.internal_router)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    # This service is the API only. People who open its URL in a browser (common right
+    # after deploying) get sent to the actual app instead of a bare 404.
+    return RedirectResponse(settings.FRONTEND_URL)
