@@ -15,7 +15,7 @@ export const NAV_LINKS = [
   { href: "/jobs", label: "Jobs for you", short: "Jobs", icon: Compass, mobile: true },
   { href: "/opportunities", label: "Add a job", short: "Add", icon: Briefcase, mobile: false },
   { href: "/applications", label: "Applications", short: "Apply", icon: ClipboardList, mobile: true },
-  { href: "/integrations", label: "Gmail alerts", short: "Gmail", icon: Mail, mobile: true },
+  { href: "/integrations", label: "Job alerts", short: "Alerts", icon: Mail, mobile: true },
   { href: "/profile", label: "Profile", short: "Profile", icon: UserRound, mobile: true },
 ];
 

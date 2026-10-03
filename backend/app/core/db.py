@@ -21,6 +21,7 @@ from app.models.integration import Integration
 from app.models.tailored_resume import TailoredResume
 from app.models.job_listing import JobListing
 from app.core.usage import UsageCounter
+from app.models.inbound import AlertAddress, InboundEmail
 
 
 async def init_db(client=None) -> None:
@@ -31,11 +32,14 @@ async def init_db(client=None) -> None:
     of connecting to a real MongoDB — this plays the same role `sqlite:///:memory:` +
     StaticPool played before the Postgres -> MongoDB switch (see ARCHITECTURE.md §10).
     """
-    mongo_client = client or AsyncIOMotorClient(settings.MONGO_URI)
+    # tz_aware: MongoDB stores UTC but hands back naive datetimes by default, which the API
+    # then serialises without a timezone — browsers read those as local (IST) time and
+    # every "2h ago" was 5.5 hours off. Aware datetimes serialise with +00:00.
+    mongo_client = client or AsyncIOMotorClient(settings.MONGO_URI, tz_aware=True)
     await init_beanie(
         database=mongo_client[settings.MONGO_DB_NAME],
         document_models=[
             User, Profile, Company, Opportunity, Document, Application, AgentExecution,
-            PreparationPlan, CalendarEvent, Integration, TailoredResume, JobListing, UsageCounter,
+            PreparationPlan, CalendarEvent, Integration, TailoredResume, JobListing, UsageCounter, AlertAddress, InboundEmail,
         ],
     )

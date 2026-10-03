@@ -6,6 +6,7 @@ import { ArrowRight, Check, Inbox, Lock, Mail, RefreshCw, Send, ShieldCheck, Tri
 import { useRequireAuth } from "@/lib/auth-context";
 import { api, ApiError } from "@/lib/api";
 import type { GmailSyncOut, GmailSyncStatus, IntegrationOut } from "@/lib/types";
+import { AlertForwardingCard } from "@/components/AlertForwarding";
 import { Alert, Badge, Button, buttonClasses, Card, PageHeader, Skeleton } from "@/components/ui";
 
 const CALLBACK_ERRORS: Record<string, string> = {
@@ -117,13 +118,17 @@ export default function IntegrationsPage() {
     <div className="max-w-4xl space-y-6">
       <div className="animate-fade-in">
         <PageHeader
-          title="Integrations"
-          subtitle="Let opportunities come to you. Pathlight watches your job alerts, prepares each application, and applies only after you approve."
+          title="Job alerts"
+          subtitle="Let LinkedIn and Naukri alerts come to Pathlight. Every job in them is checked against your resume and prepared for your review — nothing is sent without you."
         />
       </div>
 
       {message && <Alert tone="ok">{message}</Alert>}
       {error && <Alert tone="bad">{error}</Alert>}
+
+      <AlertForwardingCard />
+
+      <div className="pt-2 text-[13px] font-medium text-subtle">Or connect Gmail directly</div>
 
       {integrations === null ? (
         <Skeleton className="h-56" />
@@ -137,6 +142,7 @@ export default function IntegrationsPage() {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-[15px] font-semibold text-fg">Gmail</h2>
+                  {!gmail && <Badge>Early access</Badge>}
                   {connected && <Badge tone="ok" dot>Connected</Badge>}
                   {gmail?.status === "error" && <Badge tone="bad" icon={TriangleAlert}>Needs reconnecting</Badge>}
                 </div>
@@ -149,6 +155,13 @@ export default function IntegrationsPage() {
                     "Reads LinkedIn and Naukri job-alert emails, tailors your resume for each role and — after you approve — sends the application from your account."
                   )}
                 </p>
+                {!gmail && (
+                  <p className="mt-2 max-w-lg rounded-lg bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
+                    Early access: while Google reviews Pathlight&apos;s Gmail access, only approved testers can connect. If
+                    Google shows “access blocked”, you&apos;re not on the list yet — use forwarding above instead; it does the
+                    same job.
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">

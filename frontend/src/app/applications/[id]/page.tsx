@@ -21,7 +21,7 @@ import {
 import { useRequireAuth } from "@/lib/auth-context";
 import { api, ApiError } from "@/lib/api";
 import type { ApplicationOut, PostApplyStage, ReviewResponse, TailoredResumeOut } from "@/lib/types";
-import { JOURNEY, STAGE_META, daysUntil, deadlineLabel, deadlineTone, journeyIndex } from "@/lib/stages";
+import { JOURNEY, STAGE_META, daysUntil, deadlineLabel, deadlineTone, journeyIndex, isAlertSource } from "@/lib/stages";
 import { EligibilityCard } from "@/components/EligibilityCard";
 import { applySiteLabel, FinishApplyPanel, ReviewApplyCard } from "@/components/ReviewApplyCard";
 import { ApplicationKitPanel } from "@/components/ApplicationKit";
@@ -310,8 +310,8 @@ export default function ApplicationDetailPage() {
                     {deadlineLabel(days)}
                   </Badge>
                 )}
-                {application.source === "gmail_mcp" && (
-                  <Badge icon={Inbox}>From Gmail alert</Badge>
+                {isAlertSource(application.source) && (
+                  <Badge icon={Inbox}>From your job alerts</Badge>
                 )}
               </div>
             </div>
@@ -396,7 +396,7 @@ export default function ApplicationDetailPage() {
             </Alert>
           )}
 
-          {!decided && !application.has_job_description && application.source === "gmail_mcp" && (
+          {!decided && !application.has_job_description && isAlertSource(application.source) && (
             <Alert
               tone="info"
               title={`Check the full job on ${applySiteLabel(application.application_url)} first`}
@@ -502,7 +502,7 @@ export default function ApplicationDetailPage() {
             <dl className="mt-3 space-y-2.5 text-[13px]">
               <div className="flex justify-between gap-3">
                 <dt className="text-subtle">Source</dt>
-                <dd className="text-right text-fg">{application.source === "gmail_mcp" ? "Gmail job alert" : application.source?.startsWith("web:") ? "Company job board" : "Added by you"}</dd>
+                <dd className="text-right text-fg">{application.source === "gmail_mcp" ? "Gmail job alert" : application.source === "email_forward" ? "Forwarded job alert" : application.source?.startsWith("web:") ? "Company job board" : "Added by you"}</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="text-subtle">Deadline</dt>

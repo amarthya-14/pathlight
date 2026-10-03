@@ -53,7 +53,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       { id: "nav-jobs", group: "Go to", label: "Jobs for you", icon: Compass, run: () => go("/jobs") },
       { id: "nav-opp", group: "Go to", label: "Add a job", icon: Briefcase, run: () => go("/opportunities") },
       { id: "nav-apps", group: "Go to", label: "Applications", icon: ClipboardList, run: () => go("/applications") },
-      { id: "nav-int", group: "Go to", label: "Gmail alerts", icon: Mail, run: () => go("/integrations") },
+      { id: "nav-int", group: "Go to", label: "Job alerts", icon: Mail, run: () => go("/integrations") },
       { id: "nav-prof", group: "Go to", label: "Profile", icon: UserRound, run: () => go("/profile") },
     ];
     const actions: Item[] = [

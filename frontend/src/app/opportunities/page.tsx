@@ -11,6 +11,7 @@ import { EligibilityCard } from "@/components/EligibilityCard";
 import { SkillGapCard } from "@/components/SkillGapCard";
 import { useToast } from "@/components/Toast";
 import { Alert, Button, buttonClasses, Card, CompanyAvatar, EmptyState, PageHeader, SectionLabel, Skeleton, TextArea } from "@/components/ui";
+import { isAlertSource } from "@/lib/stages";
 
 // The agents run server-side in one request; this is an honest *indication* of the
 // sequence (it advances on a timer and holds on the last step until the response lands).
@@ -110,16 +111,16 @@ export default function OpportunitiesPage() {
     const q = query.trim().toLowerCase();
     return (applications ?? []).filter((a) => {
       const web = a.source?.startsWith("web:") ?? false;
-      if (filter === "gmail" && a.source !== "gmail_mcp") return false;
+      if (filter === "gmail" && !isAlertSource(a.source)) return false;
       if (filter === "web" && !web) return false;
-      if (filter === "manual" && (a.source === "gmail_mcp" || web)) return false;
+      if (filter === "manual" && (isAlertSource(a.source) || web)) return false;
       return !q || a.company_name.toLowerCase().includes(q) || a.role.toLowerCase().includes(q);
     });
   }, [applications, query, filter]);
 
   if (authLoading || !user) return null;
 
-  const gmailCount = (applications ?? []).filter((a) => a.source === "gmail_mcp").length;
+  const gmailCount = (applications ?? []).filter((a) => isAlertSource(a.source)).length;
   const webCount = (applications ?? []).filter((a) => a.source?.startsWith("web:")).length;
 
   return (
@@ -212,7 +213,7 @@ export default function OpportunitiesPage() {
             {(
               [
                 ["all", "All", applications?.length ?? 0],
-                ["gmail", "From Gmail", gmailCount],
+                ["gmail", "Job alerts", gmailCount],
                 ["web", "Job boards", webCount],
                 ["manual", "Pasted", (applications?.length ?? 0) - gmailCount - webCount],
               ] as const

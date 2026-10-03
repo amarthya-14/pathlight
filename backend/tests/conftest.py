@@ -35,7 +35,7 @@ from tests.fakes import FakeEmbedder, FakeLLM
 async def client(tmp_path, monkeypatch):
     # A fresh mock client per test = a fresh empty database per test (test isolation),
     # same guarantee Base.metadata.drop_all() gave us on the SQLite side before.
-    mock_client = AsyncMongoMockClient()
+    mock_client = AsyncMongoMockClient(tz_aware=True)  # same as production (app/core/db.py)
     await init_db(client=mock_client)
 
     # Redirect the sandbox's upload root to a per-test temp directory. sandbox.py's

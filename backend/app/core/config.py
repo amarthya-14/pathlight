@@ -126,6 +126,12 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = ""  # e.g. "Pathlight <pathlight.app@gmail.com>"
 
+    # Forwarded job alerts (app/api/routes/inbound.py): students forward LinkedIn/Naukri
+    # alerts to <token>@INBOUND_EMAIL_DOMAIN; the inbound-email service POSTs each message
+    # to /api/inbound/email with this secret. Both empty = feature off.
+    INBOUND_EMAIL_DOMAIN: str = ""  # e.g. alerts.pathlight.app
+    INBOUND_WEBHOOK_SECRET: str = ""
+
     # Comma-separated emails that can open the admin page (/admin).
     ADMIN_EMAILS: str = ""
 

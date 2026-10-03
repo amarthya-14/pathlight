@@ -6,7 +6,7 @@ import { ClipboardList, Columns3, Inbox, List, Plus } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import type { ApplicationOut, ApplicationStage } from "@/lib/types";
-import { STAGE_META, currentStage, daysUntil, deadlineLabel, deadlineTone } from "@/lib/stages";
+import { STAGE_META, currentStage, daysUntil, deadlineLabel, deadlineTone, isAlertSource } from "@/lib/stages";
 import { ApplicationRow, RowList } from "@/components/ApplicationRow";
 import { Badge, buttonClasses, CompanyAvatar, EmptyState, PageHeader, Skeleton } from "@/components/ui";
 
@@ -46,7 +46,7 @@ function BoardCard({ app }: { app: ApplicationOut }) {
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         {stage && <span className="text-[11px] text-subtle">{STAGE_META[stage].label}</span>}
-        {app.source === "gmail_mcp" && <Inbox size={11} className="text-subtle" />}
+        {isAlertSource(app.source) && <Inbox size={11} className="text-subtle" />}
         {days !== null && days >= 0 && days <= 30 && (
           <Badge tone={deadlineTone(days)} className="ml-auto">
             {deadlineLabel(days)}

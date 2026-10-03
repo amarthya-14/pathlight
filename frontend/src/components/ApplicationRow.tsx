@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronRight, Globe2, Inbox } from "lucide-react";
 import type { ApplicationOut } from "@/lib/types";
-import { STAGE_META, currentStage, daysUntil, deadlineLabel, deadlineTone } from "@/lib/stages";
+import { STAGE_META, currentStage, daysUntil, deadlineLabel, deadlineTone, isAlertSource } from "@/lib/stages";
 import { Badge, CompanyAvatar } from "./ui";
 
 /** One application as a row inside a bordered list (`divide-y`), Linear-style. */
@@ -19,7 +19,7 @@ export function ApplicationRow({ app, showStage = true }: { app: ApplicationOut;
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-[13.5px] font-medium text-fg">{app.role}</span>
-          {app.source === "gmail_mcp" && <Inbox size={12} className="shrink-0 text-subtle" aria-label="From your Gmail job alerts" />}
+          {isAlertSource(app.source) && <Inbox size={12} className="shrink-0 text-subtle" aria-label="From your job alerts" />}
           {app.source?.startsWith("web:") && <Globe2 size={12} className="shrink-0 text-subtle" aria-label="From a company job board" />}
         </div>
         <div className="truncate text-xs text-muted">{app.company_name}</div>

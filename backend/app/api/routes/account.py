@@ -24,6 +24,7 @@ from app.core.usage import UsageCounter
 from app.integrations.google_oauth import revoke_and_delete
 from app.mcp.sandbox import user_dir
 from app.models.agent_execution import AgentExecution
+from app.models.inbound import AlertAddress, InboundEmail
 from app.models.application import Application
 from app.models.calendar_event import CalendarEvent
 from app.models.document import Document
@@ -131,6 +132,8 @@ async def delete_account(payload: DeleteAccountRequest, current_user: User = Dep
         (Document, Document.owner_id),
         (Profile, Profile.user_id),
         (UsageCounter, UsageCounter.user_id),
+        (AlertAddress, AlertAddress.user_id),
+        (InboundEmail, InboundEmail.user_id),
     ):
         await model.find(field == uid).delete()
     shutil.rmtree(user_dir(str(uid)), ignore_errors=True)

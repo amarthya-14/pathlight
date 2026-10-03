@@ -101,29 +101,9 @@ async def _poll_integration(integration: Integration) -> PollResult:
             continue
         try:
             message = await mcp_get_message(user_id, message_id)
-            raw_text = f"Subject: {message['subject']}\nFrom: {message['from']}\n\n{message['body_text']}"
-            try:
-                jobs = await _extract_jobs(raw_text, user_id)
-            except RuntimeError as e:
-                # Discovery gave up (logged via AgentExecution). Still marked processed: an
-                # email it can't parse now won't parse tomorrow either, and re-running it
-                # every poll would just burn LLM quota.
-                jobs = []
-                result.failures.append(f"{message_id}: {e}")
-            for job in jobs:
-                if student is not None and alert_job_unfit(job.role, student):
-                    result.skipped_not_relevant += 1
-                    continue
-                if not await try_consume(user_id, "analyse"):
-                    result.failures.append(f"{message_id}: daily analysis limit reached; remaining jobs skipped")
-                    break
-                pipeline_result = await run_opportunity_pipeline(
-                    _job_text(job, message), "gmail_mcp", user_id, extraction=job
-                )
-                if pipeline_result.get("needs_human_review"):
-                    result.failures.append(f"{message_id}: {pipeline_result.get('error')}")
-                else:
-                    result.opportunities_ingested += 1
+            await ingest_alert_email(
+                user_id, message["subject"], message["from"], message["body_text"], "gmail_mcp", student, result, message_id
+            )
         except Exception as e:
             # Infrastructure failure (Gmail fetch, DB) — NOT marked processed, so the
             # next poll retries it while it's still inside the lookback window.
@@ -134,6 +114,43 @@ async def _poll_integration(integration: Integration) -> PollResult:
 
     await _record_poll(integration, processed, error=None)
     return result
+
+
+async def ingest_alert_email(
+    user_id: str,
+    subject: str,
+    sender: str,
+    body_text: str,
+    source: str,
+    student: "Student | None",
+    result: PollResult,
+    label: str = "",
+) -> None:
+    """One job-alert email -> every job in it, through the full pipeline. Shared by the
+    Gmail integration and forwarded alerts (app/api/routes/inbound.py), so both filter,
+    budget and ingest identically. Raises only on infrastructure failures."""
+    raw_text = f"Subject: {subject}\nFrom: {sender}\n\n{body_text}"
+    try:
+        jobs = await _extract_jobs(raw_text, user_id)
+    except RuntimeError as e:
+        # Discovery gave up (logged via AgentExecution). The email still counts as handled:
+        # it won't parse better tomorrow, and retrying would just burn quota.
+        result.failures.append(f"{label}: {e}")
+        return
+    for job in jobs:
+        if student is not None and alert_job_unfit(job.role, student):
+            result.skipped_not_relevant += 1
+            continue
+        if not await try_consume(user_id, "analyse"):
+            result.failures.append(f"{label}: daily analysis limit reached; remaining jobs skipped")
+            break
+        pipeline_result = await run_opportunity_pipeline(
+            _job_text(job, {"subject": subject}), source, user_id, extraction=job
+        )
+        if pipeline_result.get("needs_human_review"):
+            result.failures.append(f"{label}: {pipeline_result.get('error')}")
+        else:
+            result.opportunities_ingested += 1
 
 
 async def _student(user_id: str) -> Student | None:

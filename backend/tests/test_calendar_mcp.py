@@ -29,7 +29,7 @@ async def test_create_reminder_persists_calendar_event(client):
     assert stored.title == "Acme Corp deadline"
     # Mongo (and mongomock) round-trips datetimes as naive UTC, same as every other
     # datetime field in this codebase — compare on that basis, not tz-aware equality.
-    assert stored.event_time == event_time.replace(tzinfo=None)
+    assert stored.event_time == event_time  # tz-aware round trip (app/core/db.py)
 
 
 async def test_create_reminder_invalid_time_rejected_by_server(client):

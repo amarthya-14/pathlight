@@ -56,3 +56,8 @@ export function deadlineLabel(days: number): string {
   if (days === 1) return "1 day left";
   return `${days} days left`;
 }
+
+/** Jobs that arrived from a job-alert email — via the Gmail integration or forwarding. */
+export function isAlertSource(source: string | null | undefined): boolean {
+  return source === "gmail_mcp" || source === "email_forward";
+}

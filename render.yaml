@@ -70,4 +70,8 @@ services:
         sync: false  # Gmail: an App Password, not your account password
       - key: SMTP_FROM
         sync: false  # e.g. Pathlight <yourapp@gmail.com>
+      - key: INBOUND_EMAIL_DOMAIN
+        sync: false  # forwarded job alerts, e.g. pathlightmail.in (docs/DEPLOYMENT.md)
+      - key: INBOUND_WEBHOOK_SECRET
+        sync: false  # same value as INBOUND_SECRET on the Cloudflare email worker
 

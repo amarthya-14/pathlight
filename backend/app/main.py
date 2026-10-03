@@ -14,7 +14,7 @@ from fastapi.responses import RedirectResponse
 
 from app.core.config import check_production_settings, settings
 from app.core.db import init_db
-from app.api.routes import account, admin, auth, opportunities, documents, profile, ingest, preparation, applications, dashboard, integrations, jobs
+from app.api.routes import account, admin, auth, inbound, opportunities, documents, profile, ingest, preparation, applications, dashboard, integrations, jobs
 from app.workers.gmail_poll import run_poll_loop
 
 
@@ -77,6 +77,7 @@ app.include_router(integrations.internal_router)
 app.include_router(jobs.router)
 app.include_router(account.router)
 app.include_router(admin.router)
+app.include_router(inbound.router)
 
 
 @app.get("/health")

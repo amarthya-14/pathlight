@@ -1,0 +1,6 @@
+# Optional: deploy from the command line with `npx wrangler deploy` (or paste worker.js in
+# the Cloudflare dashboard). Set PATHLIGHT_INBOUND_URL as a variable and INBOUND_SECRET as a
+# secret: `npx wrangler secret put INBOUND_SECRET`.
+name = "pathlight-inbound"
+main = "worker.js"
+compatibility_date = "2026-10-01"

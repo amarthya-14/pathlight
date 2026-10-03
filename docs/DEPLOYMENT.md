@@ -132,3 +132,35 @@ model's free quota (~20/day/project) becomes the bottleneck, a billing-enabled k
 - Resume embeddings always use Gemini (the stored vectors must come from one model): the
   student's Gemini key if they added one, else the shared keys.
 
+### Forwarded job alerts (LinkedIn/Naukri alerts for every student, no Google review)
+
+Students forward their alert emails to a private address (`<token>@<your domain>`); a free
+Cloudflare Email Worker hands each message to Pathlight. No inbox access is requested, so
+this has no 100-user limit. Until it's set up, the Job alerts page shows it as "Coming soon".
+
+1. **Get a domain** (any registrar, a few hundred rupees a year) — ideally one used only for
+   this, e.g. `pathlightmail.in`.
+2. **Add it to Cloudflare** (free plan): Cloudflare dashboard → **Add a domain** → follow the
+   steps → at your registrar, change the nameservers to the two Cloudflare shows. Wait until
+   Cloudflare says the domain is **Active**.
+3. **Create the worker:** **Workers & Pages → Create → Create Worker** → name it
+   `pathlight-inbound` → **Deploy** → **Edit code** → replace everything with
+   `infra/email-worker/worker.js` → **Deploy**.
+4. **Worker settings → Variables and Secrets:**
+   - `PATHLIGHT_INBOUND_URL` (Text) = `https://<render-host>/api/inbound/email`
+   - `INBOUND_SECRET` (Secret) = a long random string. Generate one with
+     `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`.
+5. **Route mail to it:** your domain → **Email → Email Routing → Enable** (Cloudflare adds the
+   MX records) → **Routing rules → Catch-all address → Edit** → Action **Send to a Worker** →
+   `pathlight-inbound` → **Save** → make sure the catch-all is **enabled**.
+6. **Render env:** `INBOUND_EMAIL_DOMAIN` = your domain (e.g. `pathlightmail.in`) and
+   `INBOUND_WEBHOOK_SECRET` = the same random string as step 4 → **Save, rebuild, and deploy**.
+7. **Keep the backend awake (recommended):** Render's free server sleeps after 15 minutes and
+   takes up to a minute to wake; the worker retries for ~50s, but staying awake is safer. At
+   https://cron-job.org create a free job that opens `https://<render-host>/health` every
+   10 minutes. (Render's free plan includes 750 hours a month — enough for one service
+   running all month.)
+8. **Test:** in Pathlight → **Job alerts**, copy your address and send it any email from your
+   phone. Within a minute **Recent** shows "Ignored — not a job alert": delivery works. Then
+   follow the three steps on that page to set up Gmail forwarding.
+

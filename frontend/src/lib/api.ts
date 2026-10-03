@@ -11,6 +11,7 @@ import type {
   JobFeedParams,
   AiKeyOut,
   AiProviderId,
+  AlertAddress,
   ApplicationKit,
   IntegrationOut,
   PreparationPlanOut,
@@ -153,6 +154,8 @@ export const api = {
     request<{ ai_keys: AiKeyOut[]; message: string }>(`/api/account/ai-keys/${provider}`, { method: "DELETE" }),
   reorderAiKeys: (order: AiProviderId[]) =>
     request<{ ai_keys: AiKeyOut[]; message: string }>("/api/account/ai-keys/order", { method: "PUT", body: order }),
+  alertAddress: () => request<AlertAddress>("/api/inbound/address"),
+  rotateAlertAddress: () => request<AlertAddress>("/api/inbound/address/rotate", { method: "POST" }),
   adminStats: () => request<Record<string, unknown>>("/api/admin/stats"),
   editTailoredResume: (applicationId: string, tailoredText: string, coverNote: string) =>
     request<TailoredResumeOut>(`/api/applications/${applicationId}/tailored-resume`, {

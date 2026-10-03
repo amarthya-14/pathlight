@@ -278,6 +278,22 @@ export type ApplicationKit = {
   search_links: { label: string; url: string }[];
 };
 
+export type AlertAddress = {
+  enabled: boolean;
+  address: string | null;
+  activity: {
+    kind: "job_alert" | "gmail_confirmation" | "ignored";
+    status: "processing" | "done" | "failed" | "ignored";
+    subject: string | null;
+    jobs_ingested: number;
+    skipped_not_relevant: number;
+    error: string | null;
+    confirmation_code: string | null;
+    confirmation_link: string | null;
+    received_at: string;
+  }[];
+};
+
 export class ApiError extends Error {
   status: number;
   detail: string;

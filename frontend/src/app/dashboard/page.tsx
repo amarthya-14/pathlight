@@ -104,6 +104,7 @@ export default function DashboardPage() {
   const { user, profile, loading: authLoading } = useRequireAuth();
   const [data, setData] = useState<DashboardHomeOut | null>(null);
   const [picks, setPicks] = useState<JobFeedItem[] | null>(null);
+  const [forwarding, setForwarding] = useState(false);
   const [applications, setApplications] = useState<ApplicationOut[]>([]);
   const [integrations, setIntegrations] = useState<IntegrationOut[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +118,10 @@ export default function DashboardPage() {
     api.listApplications().then(setApplications).catch(() => {});
     api.listIntegrations().then(setIntegrations).catch(() => {});
     api
+      .alertAddress()
+      .then((a) => setForwarding(a.activity.some((x) => x.kind === "job_alert")))
+      .catch(() => {});
+    api
       .jobFeed()
       .then((f) => setPicks(f.items.filter((j) => !j.tracked_application_id).slice(0, 4)))
       .catch(() => setPicks([]));
@@ -127,7 +132,7 @@ export default function DashboardPage() {
   if (!data) return <PageSkeleton />;
 
   const name = firstName(user);
-  const gmailConnected = integrations.some((i) => i.provider === "gmail" && i.status === "connected");
+  const gmailConnected = forwarding || integrations.some((i) => i.provider === "gmail" && i.status === "connected");
   const needsAttention = applications.filter((a) => ["READY_TO_APPLY", "MANUAL_APPLY_REQUIRED"].includes(currentStage(a) ?? ""));
   const appliedCount = applications.filter((a) => a.status_history.some((e) => e.stage === "APPLIED")).length;
   const interviewing = applications.filter((a) => ["OA", "INTERVIEW", "OFFER"].includes(currentStage(a) ?? "")).length;
