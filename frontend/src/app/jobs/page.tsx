@@ -2,19 +2,41 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, Check, Compass, EyeOff, Globe2, Loader2, MapPin, Plus, RefreshCw, Search, SlidersHorizontal, Sparkles } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Check, Compass, CornerDownLeft, EyeOff, Globe2, Loader2, MapPin, Plus, RefreshCw, Search, Sparkles, X } from "lucide-react";
 import { firstName, useRequireAuth } from "@/lib/auth-context";
 import { api, ApiError } from "@/lib/api";
-import type { JobFeedItem, JobFeedOut, JobFeedParams } from "@/lib/types";
+import type { JobFeedItem, JobFeedOut, JobFeedParams, JobType, JobWebSearchOut } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import { Reveal } from "@/components/Motion";
-import { Alert, Badge, Button, buttonClasses, Card, CompanyAvatar, cx, EmptyState, PageHeader, Skeleton } from "@/components/ui";
+import { Alert, Badge, Button, buttonClasses, Card, CompanyAvatar, cx, EmptyState, PageHeader, Skeleton, type Tone } from "@/components/ui";
 
 const FILTERS = [
-  { key: "all", label: "All matches" },
+  { key: "all", label: "Anywhere" },
   { key: "india", label: "In India" },
   { key: "remote", label: "Remote" },
 ] as const;
+
+const JOB_TYPES: { key: JobType | null; label: string }[] = [
+  { key: null, label: "All types" },
+  { key: "internship", label: "Internship" },
+  { key: "full_time", label: "Full-time" },
+  { key: "part_time", label: "Part-time" },
+];
+const TYPE_LABEL: Record<JobType, string> = {
+  internship: "Internship",
+  full_time: "Full-time",
+  part_time: "Part-time",
+  contract: "Contract",
+};
+const TYPE_TONE: Record<JobType, Tone> = { internship: "accent", full_time: "neutral", part_time: "info", contract: "warn" };
+// What a web search is called in a sentence: "python internships".
+const TYPE_PLURAL: Record<JobType, string> = {
+  internship: "internships",
+  full_time: "full-time roles",
+  part_time: "part-time roles",
+  contract: "contract roles",
+};
+const WEB_SOURCES = "Himalayas, Remotive, Jobicy, The Muse and Indian job boards";
 type FilterKey = (typeof FILTERS)[number]["key"];
 
 const WINDOWS = [
@@ -29,12 +51,13 @@ const HIDDEN_LABELS: Record<keyof JobFeedOut["hidden"], string> = {
   old: "are older",
   batch: "are for other batches",
   low_match: "match less",
+  job_type: "are other job types",
   dismissed: "you hid",
 };
 const PREFS_KEY = "pathlight_job_filters";
 
-type Prefs = { minMatch: number; days: number; includeExperienced: boolean };
-const DEFAULT_PREFS: Prefs = { minMatch: 60, days: 30, includeExperienced: false };
+type Prefs = { minMatch: number; days: number; includeExperienced: boolean; jobType: JobType | null };
+const DEFAULT_PREFS: Prefs = { minMatch: 60, days: 30, includeExperienced: false, jobType: null };
 
 function loadPrefs(): Prefs {
   try {
@@ -54,7 +77,87 @@ function ago(iso: string | null): string | null {
 }
 
 function sourceLabel(source: string): string {
-  return { greenhouse: "Careers page", lever: "Careers page", remotive: "Remotive", himalayas: "Himalayas", arbeitnow: "Arbeitnow" }[source] ?? source;
+  return (
+    {
+      greenhouse: "Careers page",
+      lever: "Careers page",
+      ashby: "Careers page",
+      smartrecruiters: "Careers page",
+      remotive: "Remotive",
+      himalayas: "Himalayas",
+      arbeitnow: "Arbeitnow",
+      jobicy: "Jobicy",
+      themuse: "The Muse",
+      adzuna: "Adzuna",
+      jooble: "Jooble",
+    }[source] ?? source
+  );
+}
+
+function Segmented<T extends string | number | null>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { key: T; label: string; count?: number }[];
+  value: T;
+  onChange: (key: T) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex max-w-full gap-0.5 overflow-x-auto rounded-lg border border-line bg-surface-2 p-0.5">
+      {options.map((o) => {
+        const active = o.key === value;
+        return (
+          <button
+            key={String(o.key)}
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(o.key)}
+            className={cx(
+              "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium transition-[background-color,color,box-shadow] duration-200",
+              active ? "bg-surface text-fg shadow-xs ring-1 ring-line" : "text-muted hover:text-fg"
+            )}
+          >
+            {o.label}
+            {o.count !== undefined && (
+              <span className={cx("tabular-nums text-[11px]", active ? "text-muted" : "text-subtle")}>{o.count}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SelectChip({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  options: { value: number; label: string }[];
+}) {
+  return (
+    <label className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface pl-2.5 pr-1 text-[12.5px] text-muted">
+      {label}
+      <select
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-7 cursor-pointer rounded-md bg-transparent pr-1 text-[12.5px] font-medium text-fg focus:outline-none"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 function MatchMeter({ value }: { value: number }) {
@@ -74,11 +177,13 @@ function JobCard({
   onTrack,
   onDismiss,
   state,
+  isNew,
 }: {
   job: JobFeedItem;
   onTrack: () => void;
   onDismiss: () => void;
   state: "idle" | "busy" | "added" | "dismissed";
+  isNew: boolean;
 }) {
   const tracked = job.tracked_application_id;
   return (
@@ -93,6 +198,16 @@ function JobCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
             <div className="min-w-0">
+              {(isNew || job.job_type !== "full_time") && (
+                <div className="mb-1.5 flex flex-wrap gap-1.5">
+                  {isNew && (
+                    <Badge tone="ok" dot>
+                      New from the web
+                    </Badge>
+                  )}
+                  {job.job_type !== "full_time" && <Badge tone={TYPE_TONE[job.job_type]}>{TYPE_LABEL[job.job_type]}</Badge>}
+                </div>
+              )}
               <a href={job.url} target="_blank" rel="noopener noreferrer" className="group inline-flex items-start gap-1 text-[15px] font-semibold leading-snug text-fg">
                 <span className="group-hover:underline group-hover:decoration-line-strong group-hover:underline-offset-4">{job.title}</span>
                 <ArrowUpRight size={14} className="mt-1 shrink-0 text-subtle transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
@@ -104,6 +219,12 @@ function JobCard({
                   {job.remote ? <Globe2 size={12} /> : <MapPin size={12} />}
                   {job.location || (job.remote ? "Remote" : "—")}
                 </span>
+                {job.job_type === "full_time" && (
+                  <>
+                    <span className="text-line-strong">·</span>
+                    <span>Full-time</span>
+                  </>
+                )}
                 {ago(job.posted_at) && (
                   <>
                     <span className="text-line-strong">·</span>
@@ -170,6 +291,17 @@ function JobCard({
   );
 }
 
+type WebState =
+  | { phase: "idle" }
+  | { phase: "searching"; q: string; jobType: JobType | null }
+  | { phase: "done"; q: string; jobType: JobType | null; result: JobWebSearchOut; fitting: number }
+  | { phase: "error"; message: string };
+
+function searchPhrase(q: string, jobType: JobType | null): string {
+  const what = jobType ? TYPE_PLURAL[jobType] : "roles";
+  return q ? `“${q}” ${what}` : what;
+}
+
 export default function JobsPage() {
   const { user, profile, loading: authLoading } = useRequireAuth();
   const toast = useToast();
@@ -180,6 +312,9 @@ export default function JobsPage() {
   const [prefs, setPrefsState] = useState<Prefs>(DEFAULT_PREFS);
   const [prefsReady, setPrefsReady] = useState(false);
   const [states, setStates] = useState<Record<string, "busy" | "added" | "dismissed">>({});
+  const [web, setWeb] = useState<WebState>({ phase: "idle" });
+  const [newIds, setNewIds] = useState<Set<string>>(new Set());
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     setPrefsState(loadPrefs());
@@ -195,14 +330,16 @@ export default function JobsPage() {
       }
       return next;
     });
-  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async (params: JobFeedParams) => {
     setError(null);
     try {
-      setFeed(await api.jobFeed(params));
+      const next = await api.jobFeed(params);
+      setFeed(next);
+      return next;
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Couldn't load jobs");
+      return null;
     }
   }, []);
 
@@ -218,13 +355,35 @@ export default function JobsPage() {
   }, [query, prefs, prefsReady, user, load]);
 
   const items = useMemo(() => {
-    const all = feed?.items ?? [];
-    if (filter === "remote") return all.filter((j) => j.remote);
-    if (filter === "india") return all.filter((j) => !j.remote);
+    let all = feed?.items ?? [];
+    if (filter === "remote") all = all.filter((j) => j.remote);
+    if (filter === "india") all = all.filter((j) => !j.remote);
+    // Just found on the web: those first, so the search visibly did something.
+    if (newIds.size) all = [...all.filter((j) => newIds.has(j.id)), ...all.filter((j) => !newIds.has(j.id))];
     return all;
-  }, [feed, filter]);
+  }, [feed, filter, newIds]);
 
   if (authLoading || !user) return null;
+
+  const roles = profile?.target_roles ?? [];
+
+  const searchWeb = async () => {
+    if (web.phase === "searching") return;
+    // No query: search for what the student is looking for.
+    const q = query.trim() || roles[0] || "";
+    const jobType = prefs.jobType;
+    setWeb({ phase: "searching", q, jobType });
+    try {
+      const result = await api.searchJobsOnWeb(q, jobType);
+      const next = await load({ q: query.trim() || undefined, ...prefs });
+      const added = new Set(result.new_ids);
+      const fitting = next ? next.items.filter((j) => added.has(j.id)).length : 0;
+      setNewIds(added);
+      setWeb({ phase: "done", q, jobType, result, fitting });
+    } catch (err) {
+      setWeb({ phase: "error", message: err instanceof ApiError ? err.detail : "Couldn't reach the job sites" });
+    }
+  };
 
   const track = async (job: JobFeedItem) => {
     setStates((s) => ({ ...s, [job.id]: "busy" }));
@@ -267,15 +426,34 @@ export default function JobsPage() {
 
   const hiddenSummary = feed
     ? (Object.entries(feed.hidden) as [keyof JobFeedOut["hidden"], number][])
-        .filter(([, n]) => n > 0)
+        .filter(([key, n]) => n > 0 && HIDDEN_LABELS[key])
         .sort((a, b) => b[1] - a[1])
     : [];
 
-  const roles = profile?.target_roles ?? [];
   const updated = feed?.refreshed_at ? ago(feed.refreshed_at) : null;
+  const customised =
+    prefs.jobType !== DEFAULT_PREFS.jobType ||
+    prefs.days !== DEFAULT_PREFS.days ||
+    prefs.minMatch !== DEFAULT_PREFS.minMatch ||
+    prefs.includeExperienced !== DEFAULT_PREFS.includeExperienced ||
+    filter !== "all";
+  const resetFilters = () => {
+    setPrefs({ ...DEFAULT_PREFS });
+    setFilter("all");
+  };
+  const typeCounts = feed?.job_types;
+  const allCount = typeCounts ? Object.values(typeCounts).reduce((a, b) => a + b, 0) : undefined;
+  const webLabel = searchPhrase(query.trim() || roles[0] || "", prefs.jobType);
+  const searching = web.phase === "searching";
+
+  const webCta = (
+    <Button variant="secondary" onClick={searchWeb} loading={searching}>
+      {!searching && <Globe2 size={13} />} Search job sites for {webLabel}
+    </Button>
+  );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         eyebrow={
           feed ? (
@@ -319,82 +497,136 @@ export default function JobsPage() {
         </Alert>
       )}
 
-      <Card className="flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <span className="flex items-center gap-1.5 px-1 text-[13px] font-medium text-fg">
-          <SlidersHorizontal size={14} className="text-subtle" /> Show
-        </span>
-        <div className="flex gap-1 rounded-lg border border-line bg-surface-2 p-0.5">
-          {WINDOWS.map((w) => (
-            <button
-              key={w.days}
-              onClick={() => setPrefs({ days: w.days })}
-              aria-pressed={prefs.days === w.days}
-              className={cx(
-                "h-7 rounded-md px-2.5 text-[12.5px] font-medium transition-[background-color,color,box-shadow] duration-200",
-                prefs.days === w.days ? "bg-surface text-fg shadow-xs ring-1 ring-line" : "text-muted hover:text-fg"
-              )}
-            >
-              {w.label}
-            </button>
-          ))}
-        </div>
-        <label className="flex items-center gap-2 text-[13px] text-muted">
-          Match at least
-          <select
-            value={prefs.minMatch}
-            onChange={(e) => setPrefs({ minMatch: Number(e.target.value) })}
-            className="h-8 rounded-lg border border-line-strong bg-surface px-2 text-[13px] font-medium text-fg"
-          >
-            {THRESHOLDS.map((t) => (
-              <option key={t} value={t}>
-                {t}%
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex cursor-pointer items-center gap-2 text-[13px] text-muted sm:ml-auto">
-          <input
-            type="checkbox"
-            className="h-3.5 w-3.5 accent-[var(--ink)]"
-            checked={prefs.includeExperienced}
-            onChange={(e) => setPrefs({ includeExperienced: e.target.checked })}
+      <Card className="overflow-hidden p-0">
+        <form
+          className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center"
+          onSubmit={(e) => {
+            e.preventDefault();
+            searchWeb();
+          }}
+        >
+          <div className="relative flex-1">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtle" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search a role, skill, company or city"
+              aria-label="Search jobs"
+              className="h-10 w-full rounded-lg border border-line-strong bg-surface pl-9 pr-9 text-sm text-fg shadow-xs placeholder:text-subtle focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/15"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-subtle hover:bg-surface-hover hover:text-fg"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+          <Button type="submit" size="lg" loading={searching} title="Search job sites live and add what's found to your feed">
+            {!searching && <Globe2 size={14} />} Search the web
+          </Button>
+        </form>
+        <div className="flex flex-col gap-2.5 border-t border-line bg-surface-2/50 px-3 py-2.5 lg:flex-row lg:flex-wrap lg:items-center">
+          <Segmented
+            label="Job type"
+            value={prefs.jobType}
+            onChange={(jobType) => setPrefs({ jobType })}
+            options={JOB_TYPES.map((t) => ({
+              ...t,
+              count: t.key === null ? allCount : typeCounts?.[t.key],
+            }))}
           />
-          Include roles that need experience
-        </label>
+          <Segmented label="Location" value={filter} onChange={setFilter} options={[...FILTERS]} />
+          <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
+            <SelectChip
+              label="Posted"
+              value={prefs.days}
+              onChange={(days) => setPrefs({ days })}
+              options={WINDOWS.map((w) => ({ value: w.days, label: w.label }))}
+            />
+            <SelectChip
+              label="Match"
+              value={prefs.minMatch}
+              onChange={(minMatch) => setPrefs({ minMatch })}
+              options={THRESHOLDS.map((t) => ({ value: t, label: `${t}%+` }))}
+            />
+            <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-2.5 text-[12.5px] text-muted">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 accent-[var(--ink)]"
+                checked={prefs.includeExperienced}
+                onChange={(e) => setPrefs({ includeExperienced: e.target.checked })}
+              />
+              Roles needing experience
+            </label>
+            {customised && (
+              <button onClick={resetFilters} className="h-8 px-1.5 text-[12.5px] font-medium text-muted underline-offset-4 hover:text-fg hover:underline">
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
       </Card>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-1 rounded-lg border border-line bg-surface-2 p-0.5" role="tablist">
-          {FILTERS.map((f) => (
-            <button
-              key={f.key}
-              role="tab"
-              aria-selected={filter === f.key}
-              onClick={() => setFilter(f.key)}
-              className={cx(
-                "h-7 rounded-md px-3 text-[13px] font-medium transition-[background-color,color,box-shadow] duration-200",
-                filter === f.key ? "bg-surface text-fg shadow-xs ring-1 ring-line" : "text-muted hover:text-fg"
-              )}
-            >
-              {f.label}
+      <p className="-mt-2 flex items-center gap-1.5 px-1 text-[12px] text-subtle">
+        Typing filters your feed instantly. Press <CornerDownLeft size={11} className="inline" /> Enter to also search job sites live for more.
+      </p>
+
+      {searching && (
+        <Card className="sweep flex items-center gap-3 p-4 text-[13px] text-muted">
+          <Loader2 size={15} className="animate-spin text-accent" />
+          <span>
+            Searching {WEB_SOURCES} for <span className="font-medium text-fg">{searchPhrase(web.q, web.jobType)}</span>…
+          </span>
+        </Card>
+      )}
+      {web.phase === "done" && (
+        <Alert
+          tone={web.result.new > 0 ? "ok" : "info"}
+          title={
+            web.result.cached
+              ? `Already searched the web for ${searchPhrase(web.q, web.jobType)} recently`
+              : web.result.new > 0
+                ? `Added ${web.result.new} new ${web.result.new === 1 ? "role" : "roles"} from the web`
+                : `No new ${searchPhrase(web.q, web.jobType)} on the web right now`
+          }
+          action={
+            <button onClick={() => setWeb({ phase: "idle" })} aria-label="Dismiss" className="rounded p-0.5 opacity-70 hover:opacity-100">
+              <X size={14} />
             </button>
-          ))}
-        </div>
-        <div className="relative sm:w-72">
-          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtle" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search role, company or city"
-            className="h-9 w-full rounded-lg border border-line-strong bg-surface pl-8 pr-3 text-sm text-fg shadow-xs placeholder:text-subtle focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/15"
-          />
-        </div>
-      </div>
+          }
+        >
+          {web.result.cached
+            ? "Those results are already in your feed below."
+            : web.result.new > 0
+              ? web.fitting > 0
+                ? `${web.fitting} fit your filters and are at the top, marked New. The rest didn't match your field, level or filters.`
+                : "None passed your current filters — try a lower match threshold, a longer time window, or another job type."
+              : web.result.found > 0
+                ? `Found ${web.result.found}, all already in your feed.`
+                : "Try a broader search — a role or a skill rather than a company."}
+        </Alert>
+      )}
+      {web.phase === "error" && (
+        <Alert
+          tone="bad"
+          action={
+            <button onClick={() => setWeb({ phase: "idle" })} aria-label="Dismiss" className="rounded p-0.5 opacity-70 hover:opacity-100">
+              <X size={14} />
+            </button>
+          }
+        >
+          {web.message}
+        </Alert>
+      )}
 
       {error && <Alert tone="bad">{error}</Alert>}
 
       {hiddenSummary.length > 0 && (
-        <p className="text-[12.5px] leading-relaxed text-subtle">
+        <p className="px-1 text-[12.5px] leading-relaxed text-subtle">
           Hidden so you don&apos;t waste time:{" "}
           {hiddenSummary.map(([key, n], i) => (
             <span key={key}>
@@ -418,23 +650,45 @@ export default function JobsPage() {
       ) : items.length === 0 ? (
         <EmptyState
           icon={Compass}
-          title={query ? `Nothing matching “${query}”` : "No roles fit these filters right now"}
+          title={
+            query
+              ? `Nothing in your feed for “${query}”${prefs.jobType ? ` · ${TYPE_LABEL[prefs.jobType]}` : ""}`
+              : prefs.jobType
+                ? `No ${TYPE_PLURAL[prefs.jobType]} fit these filters yet`
+                : "No roles fit these filters right now"
+          }
           description={
             query
-              ? "Try a broader search — a skill, a city, or a company."
+              ? "Search the job sites live — new matches are added to your feed."
               : prefs.days < 90
-                ? "Try “Past 3 months” or a lower match threshold. Boards refresh twice a day."
-                : "Try a lower match threshold, or check back tomorrow — boards refresh twice a day."
+                ? "Search the job sites live, or try “Past 3 months” or a lower match threshold."
+                : "Search the job sites live, or try a lower match threshold."
           }
+          action={webCta}
         />
       ) : (
         <div className="space-y-3">
           {items.map((job, i) => (
             <Reveal key={job.id} delay={Math.min(i, 6) * 60}>
-              <JobCard job={job} state={states[job.id] ?? "idle"} onTrack={() => track(job)} onDismiss={() => dismiss(job)} />
+              <JobCard
+                job={job}
+                isNew={newIds.has(job.id)}
+                state={states[job.id] ?? "idle"}
+                onTrack={() => track(job)}
+                onDismiss={() => dismiss(job)}
+              />
             </Reveal>
           ))}
-          <p className="pt-2 text-center text-xs text-subtle">
+          <Card className="flex flex-col items-center gap-3 border-dashed p-5 text-center sm:flex-row sm:text-left">
+            <div className="flex-1">
+              <div className="text-[13.5px] font-medium text-fg">Want more?</div>
+              <div className="mt-0.5 text-[12.5px] text-muted">
+                Search {WEB_SOURCES} live — new roles that fit are added here.
+              </div>
+            </div>
+            {webCta}
+          </Card>
+          <p className="pt-1 text-center text-xs text-subtle">
             Listings come straight from each company&apos;s public job board and from job aggregators.
           </p>
         </div>

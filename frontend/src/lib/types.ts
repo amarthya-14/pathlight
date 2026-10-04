@@ -254,22 +254,40 @@ export type JobFeedItem = {
   reasons: string[];
   min_experience: number | null;
   entry_level: boolean;
+  job_type: JobType;
   tracked_application_id: string | null;
 };
+
+export type JobType = "internship" | "full_time" | "part_time" | "contract";
 
 export type JobFeedOut = {
   items: JobFeedItem[];
   total_listings: number;
   matching: number;
-  hidden: Record<"field" | "experience" | "batch" | "old" | "low_match" | "dismissed", number>;
+  hidden: Record<"field" | "experience" | "batch" | "old" | "low_match" | "job_type" | "dismissed", number>;
   refreshed_at: string | null;
   refreshing: boolean;
   personalized: boolean;
   families: string[];
   sources: number;
+  job_types: Record<JobType, number>;
 };
 
-export type JobFeedParams = { q?: string; minMatch?: number; days?: number; includeExperienced?: boolean };
+export type JobFeedParams = {
+  q?: string;
+  minMatch?: number;
+  days?: number;
+  includeExperienced?: boolean;
+  jobType?: JobType | null;
+};
+
+export type JobWebSearchOut = {
+  found: number;
+  new: number;
+  new_ids: string[];
+  sources: Record<string, string>;
+  cached: boolean;
+};
 
 export type ApplicationKit = {
   answers: { question: string; answer: string; note: string }[];

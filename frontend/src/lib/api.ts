@@ -9,6 +9,8 @@ import type {
   IngestResponse,
   JobFeedOut,
   JobFeedParams,
+  JobType,
+  JobWebSearchOut,
   AiKeyOut,
   AiProviderId,
   AlertAddress,
@@ -228,9 +230,12 @@ export const api = {
     if (params.minMatch !== undefined) qs.set("min_match", String(params.minMatch));
     if (params.days !== undefined) qs.set("days", String(params.days));
     if (params.includeExperienced) qs.set("include_experienced", "true");
+    if (params.jobType) qs.set("job_type", params.jobType);
     const s = qs.toString();
     return request<JobFeedOut>(`/api/jobs/feed${s ? `?${s}` : ""}`);
   },
+  searchJobsOnWeb: (q: string, jobType?: JobType | null) =>
+    request<JobWebSearchOut>("/api/jobs/search", { method: "POST", body: { q, job_type: jobType ?? null } }),
   dismissJob: (listingId: string) => request<void>(`/api/jobs/${listingId}/dismiss`, { method: "POST" }),
   applicationKit: (applicationId: string) => request<ApplicationKit>(`/api/applications/${applicationId}/kit`),
   trackJob: (listingId: string) =>

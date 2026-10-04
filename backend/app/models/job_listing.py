@@ -32,6 +32,9 @@ class JobListing(Document):
     entry_level: bool = False
     senior: bool = False
     batch_years: list[int] = Field(default_factory=list)
+    # internship | full_time | part_time | contract (job_signals.job_type). None on rows
+    # cached before it existed — classified from the title at ranking time.
+    job_type: str | None = None
     posted_at: datetime | None = None
     fetched_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -61,3 +64,4 @@ class JobListingCard(BaseModel):
     entry_level: bool = False
     senior: bool = False
     batch_years: list[int] = Field(default_factory=list)
+    job_type: str | None = None

@@ -21,6 +21,8 @@ intelligence platform. Extract ONLY information explicitly present in the text y
 given. Do NOT invent, infer, guess, or fill in values that are not stated in the text — \
 leave a field null or empty if it is not mentioned. In particular:
 - Do not assume a CGPA or branch requirement exists unless the text states one.
+- min_cgpa: the number as stated — a CGPA ("7.5 CGPA" -> 7.5) or a percentage ("60% \
+aggregate" -> 60). allowed_branches: each branch as written ("B.Tech CSE", "ECE").
 - Do not invent compensation figures.
 - If eligibility is described in qualitative, non-numeric terms (e.g. "strong problem \
 solving skills preferred"), put that text verbatim in raw_eligibility_text rather than \

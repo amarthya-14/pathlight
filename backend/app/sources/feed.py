@@ -14,6 +14,7 @@ from app.models.application import Application
 from app.models.job_listing import JobListing, JobListingCard
 from app.models.opportunity import Opportunity
 from app.models.user import Profile
+from app.sources.job_boards import search_keywords
 from app.sources.job_matching import Filters, Student, rank, skills_in
 from app.sources.job_signals import user_families
 
@@ -57,14 +58,17 @@ async def tracked_urls(user_id) -> dict[str, str]:
 async def matches_for(user_id, filters: Filters, query: str | None = None, limit: int = 80):
     student, profile, personalized = await student_for(user_id)
     listings = await JobListing.find_all().project(JobListingCard).to_list()
-    if query and query.strip():
-        needle = query.strip().lower()
-        listings = [
-            l for l in listings
-            if needle in l.title.lower() or needle in l.company.lower() or needle in l.location.lower()
-        ]
-    matches, hidden, matching = rank(listings, student, filters, set(profile.dismissed_jobs) if profile else set(), limit)
-    return matches, hidden, matching, student, personalized, listings
+    words = search_keywords(query or "").lower().split()
+    if words:
+        # Every word must appear somewhere: "python bangalore" finds a Bengaluru role that
+        # asks for Python even though neither word is in its title. Job-type words
+        # ("intern") are left to the type filter.
+        def haystack(l) -> str:
+            return " ".join([l.title, l.company, l.location, " ".join(l.skills)]).lower().replace("bengaluru", "bengaluru bangalore")
+
+        listings = [l for l in listings if all(w in haystack(l) for w in words)]
+    matches, hidden, matching, by_type = rank(listings, student, filters, set(profile.dismissed_jobs) if profile else set(), limit)
+    return matches, hidden, matching, by_type, student, personalized, listings
 
 
 async def track_listing_for(listing: JobListing, user_id: str) -> None:

@@ -8,6 +8,8 @@ What a posting is and who it's for — read from its title and description, dete
                    "LinkedIn asks me for experience I don't have" is applying to these.
 - entry_level:     explicit fresher signals (intern, new grad, 0-1 years, "freshers").
 - batch_years:     graduation batches the posting is limited to ("2025/2026 batch").
+- job_type:        internship, full_time, part_time or contract — from the board's own
+                   employment-type field when it has one, else the title and description.
 
 Used at fetch time (stored on JobListing) and for a user's own target roles/resume, so the
 same classifier decides both sides of "is this job in my field?".
@@ -182,7 +184,41 @@ def batch_years(text: str) -> list[int]:
     return sorted(years)
 
 
-def signals(title: str, description: str) -> dict:
+# ── Job type ───────────────────────────────────────────────────────────────────
+
+JOB_TYPES = ("internship", "full_time", "part_time", "contract")
+_TYPE_INTERN = re.compile(r"\b(intern|interns|internship|apprentice\w*|co-?op|summer analyst)\b", re.I)
+_TYPE_PART = re.compile(r"\bpart[- ]?time\b", re.I)
+_TYPE_CONTRACT = re.compile(r"\b(contract|contractor|freelanc\w*|temporary|temp|fixed[- ]term)\b", re.I)
+_TYPE_FULL = re.compile(r"\b(full[- ]?time|permanent|regular)\b", re.I)
+# Descriptions are noisy ("our interns love it here"), so only explicit phrasing counts.
+_DESC_INTERN = re.compile(r"\b(\d{1,2}[- ]?months?[- ]internship|internship (?:program(?:me)?|opportunity|role|position|duration)|this (?:is an? )?internship|paid internship|stipend)\b", re.I)
+_DESC_PART = re.compile(r"\b(this is a part[- ]?time|part[- ]?time (?:role|position|job|opportunity)|\d{1,2}\s*(?:-\s*\d{1,2}\s*)?hours ?(?:per|a|/) ?week)\b", re.I)
+
+
+def job_type(title: str, description: str = "", hint: str = "") -> str:
+    """The board's own field (hint: "Intern", "FullTime", "part time", "freelance") wins
+    for part-time/contract/full-time, but an "Intern" title always means internship —
+    boards often file internships as "full time"."""
+    title = title or ""
+    hint = (hint or "").replace("_", " ")
+    if _TYPE_INTERN.search(title) or _TYPE_INTERN.search(hint):
+        return "internship"
+    if _TYPE_PART.search(title) or _DESC_PART.search(title) or re.search(r"part\s*time", hint, re.I):
+        return "part_time"
+    if _TYPE_CONTRACT.search(title) or _TYPE_CONTRACT.search(hint):
+        return "contract"
+    if _TYPE_FULL.search(hint) or re.search(r"fulltime|full\s*time", hint, re.I):
+        return "full_time"
+    head = (description or "")[:3000]
+    if _DESC_INTERN.search(head):
+        return "internship"
+    if _DESC_PART.search(head) and not _TYPE_FULL.search(head):
+        return "part_time"
+    return "full_time"
+
+
+def signals(title: str, description: str, employment: str = "") -> dict:
     text = f"{title}\n{description or ''}"
     exp = min_experience(text)
     if exp is None:
@@ -195,4 +231,5 @@ def signals(title: str, description: str) -> dict:
         "entry_level": is_entry_level(title, description),
         "senior": is_senior_title(title),
         "batch_years": batch_years(text),
+        "job_type": job_type(title, description, employment),
     }
