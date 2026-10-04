@@ -5,6 +5,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import { THEME_INIT_SCRIPT, ThemeProvider } from "@/lib/theme";
 import { ToastProvider } from "@/components/Toast";
 import { Shell } from "@/components/Shell";
+import { Analytics } from "@vercel/analytics/next";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </ToastProvider>
           </AuthProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
