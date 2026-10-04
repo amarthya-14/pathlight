@@ -7,22 +7,27 @@ first feed request after that refreshes in the background and serves the cached 
 meanwhile, so nobody waits on 25 job boards. Tracking a listing runs it through the same
 pipeline as a pasted job description (eligibility -> skill gap -> plan -> tailored
 resume), so it lands in Applications like any other opportunity.
+
+POST /search runs one student's search live on the keyword-searchable sources and adds
+what it finds to the same cache, so the feed (and everyone else's) grows with it.
 """
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 
 from beanie import PydanticObjectId
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.deps import get_current_user
 from app.core.usage import consume_or_429
 from app.models.job_listing import JobListing
 from app.models.user import Profile, User
-from app.sources.job_boards import fetch_all
+from app.sources.job_boards import fetch_all, search_web
+from app.sources.job_signals import JOB_TYPES
 from app.sources.feed import matches_for, track_listing_for, tracked_urls
-from app.sources.job_matching import Filters, listing_skills
+from app.sources.job_matching import Filters, listing_skills, listing_type
 from app.sources.job_signals import signals
 
 logger = logging.getLogger(__name__)
@@ -31,6 +36,13 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 REFRESH_AFTER = timedelta(hours=12)
 # Listings not seen in a refresh for this long are closed postings — dropped.
 EXPIRE_AFTER = timedelta(days=4)
+
+# A web search costs ~6 outbound requests: one per user every few seconds, and the same
+# search within half an hour is answered from the cache it already filled.
+SEARCH_COOLDOWN = 8.0
+SEARCH_CACHE_FOR = 30 * 60
+_last_search: dict[str, float] = {}
+_recent_searches: dict[tuple[str, str], float] = {}
 
 _refresh_lock = asyncio.Lock()
 _last_status: dict[str, str] = {}
@@ -51,6 +63,7 @@ class JobFeedItem(BaseModel):
     reasons: list[str] = []
     min_experience: float | None = None
     entry_level: bool = False
+    job_type: str = "full_time"
     tracked_application_id: str | None = None
 
 
@@ -64,6 +77,29 @@ class JobFeedOut(BaseModel):
     personalized: bool
     families: list[str]
     sources: int
+    job_types: dict[str, int]  # matches per type, before the job-type filter
+
+
+async def _store(listings: list[dict], now: datetime) -> int:
+    """Upserts fetched listings; returns how many were new to the cache."""
+    collection = JobListing.get_motor_collection()
+    # CPU-bound (hundreds of listings x the skill vocabulary) — in a worker thread so
+    # the event loop keeps serving requests meanwhile.
+    await asyncio.to_thread(_attach_skills, listings)
+
+    async def upsert(listing: dict) -> bool:
+        result = await collection.update_one(
+            {"source": listing["source"], "external_id": listing["external_id"]},
+            {"$set": {**listing, "fetched_at": now}},
+            upsert=True,
+        )
+        return result.upserted_id is not None
+
+    new = 0
+    # Chunked so a few hundred listings don't open a few hundred connections at once.
+    for i in range(0, len(listings), 50):
+        new += sum(await asyncio.gather(*(upsert(l) for l in listings[i:i + 50])))
+    return new
 
 
 async def refresh_listings() -> int:
@@ -75,22 +111,8 @@ async def refresh_listings() -> int:
         _last_status.update(source_status)
         now = datetime.now(timezone.utc)
         if listings:
+            await _store(listings, now)
             collection = JobListing.get_motor_collection()
-
-            # CPU-bound (hundreds of listings x the skill vocabulary) — in a worker thread so
-            # the event loop keeps serving requests meanwhile.
-            await asyncio.to_thread(_attach_skills, listings)
-
-            async def upsert(listing: dict) -> None:
-                await collection.update_one(
-                    {"source": listing["source"], "external_id": listing["external_id"]},
-                    {"$set": {**listing, "fetched_at": now}},
-                    upsert=True,
-                )
-
-            # Chunked so a few hundred listings don't open a few hundred connections at once.
-            for i in range(0, len(listings), 50):
-                await asyncio.gather(*(upsert(l) for l in listings[i:i + 50]))
             await collection.delete_many({"fetched_at": {"$lt": now - EXPIRE_AFTER}})
             # Rows this refresh didn't see (closed postings awaiting expiry) still need the
             # field, or the "missing skills" check below would refresh on every request.
@@ -102,7 +124,7 @@ async def refresh_listings() -> int:
 def _attach_skills(listings: list[dict]) -> None:
     for listing in listings:
         listing["skills"] = listing_skills(listing["title"], listing["description"])
-        listing.update(signals(listing["title"], listing["description"]))
+        listing.update(signals(listing["title"], listing["description"], listing.pop("employment", "")))
 
 
 async def _popular_target_roles(limit: int = 6) -> list[str]:
@@ -135,6 +157,7 @@ async def job_feed(
     min_match: int = Query(default=60, ge=0, le=100),
     days: int = Query(default=30, ge=0, le=365),  # 0 = any age
     include_experienced: bool = False,
+    job_type: str | None = Query(default=None, pattern="^(internship|full_time|part_time|contract)$"),
     current_user: User = Depends(get_current_user),
 ):
     newest = await _newest_fetch()
@@ -151,8 +174,10 @@ async def job_feed(
         asyncio.create_task(_refresh_quietly())
         refreshing = True
 
-    matches, hidden, matching, student, personalized, listings = await matches_for(
-        current_user.id, Filters(min_match=min_match, days=days, include_experienced=include_experienced), q
+    matches, hidden, matching, by_type, student, personalized, listings = await matches_for(
+        current_user.id,
+        Filters(min_match=min_match, days=days, include_experienced=include_experienced, job_type=job_type),
+        q,
     )
     tracked = await tracked_urls(current_user.id)
 
@@ -173,6 +198,7 @@ async def job_feed(
                 reasons=m.reasons,
                 min_experience=m.listing.min_experience,
                 entry_level=m.listing.entry_level,
+                job_type=listing_type(m.listing),
                 tracked_application_id=tracked.get(m.listing.url),
             )
             for m in matches
@@ -185,7 +211,61 @@ async def job_feed(
         personalized=personalized,
         families=sorted(student.families),
         sources=len({l.source + l.company for l in listings}),
+        job_types={t: by_type.get(t, 0) for t in JOB_TYPES},
     )
+
+
+class WebSearchIn(BaseModel):
+    q: str = Field(default="", max_length=80)
+    job_type: str | None = Field(default=None, pattern="^(internship|full_time|part_time|contract)$")
+
+
+class WebSearchOut(BaseModel):
+    found: int  # relevant listings the sources returned
+    new: int  # of those, not already in the feed
+    new_ids: list[str]
+    sources: dict[str, str]
+    cached: bool = False
+
+
+@router.post("/search", response_model=WebSearchOut)
+async def web_search(body: WebSearchIn, current_user: User = Depends(get_current_user)):
+    """Searches the job sites live for this query/type and adds the results to the feed
+    cache. The client then reloads the feed, which ranks them like any other listing."""
+    user_key = str(current_user.id)
+    now_mono = time.monotonic()
+    if now_mono - _last_search.get(user_key, 0) < SEARCH_COOLDOWN:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="One web search at a time — try again in a few seconds.")
+    key = (body.q.strip().lower(), body.job_type or "")
+    if now_mono - _recent_searches.get(key, -SEARCH_CACHE_FOR) < SEARCH_CACHE_FOR:
+        return WebSearchOut(found=0, new=0, new_ids=[], sources={}, cached=True)
+    _last_search[user_key] = now_mono
+
+    listings, source_status = await search_web(body.q, body.job_type)
+    _recent_searches[key] = now_mono
+    if len(_recent_searches) > 500:
+        for k, _ in sorted(_recent_searches.items(), key=lambda kv: kv[1])[:250]:
+            _recent_searches.pop(k, None)
+    new = 0
+    new_ids: list[str] = []
+    if listings:
+        now = datetime.now(timezone.utc)
+        before = {(l["source"], l["external_id"]) for l in listings}
+        existing = {
+            (d["source"], d["external_id"])
+            async for d in JobListing.get_motor_collection().find(
+                {"$or": [{"source": s, "external_id": e} for s, e in before]}, {"source": 1, "external_id": 1}
+            )
+        }
+        new = await _store(listings, now)
+        fresh = [l for l in listings if (l["source"], l["external_id"]) not in existing]
+        if fresh:
+            async for d in JobListing.get_motor_collection().find(
+                {"$or": [{"source": l["source"], "external_id": l["external_id"]} for l in fresh]}, {"_id": 1}
+            ):
+                new_ids.append(str(d["_id"]))
+    logger.info("web search %r (%s): %d found, %d new", body.q, body.job_type, len(listings), new)
+    return WebSearchOut(found=len(listings), new=new, new_ids=new_ids, sources=source_status)
 
 
 @router.post("/{listing_id}/dismiss", status_code=status.HTTP_204_NO_CONTENT)

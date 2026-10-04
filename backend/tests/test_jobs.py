@@ -5,7 +5,7 @@ from app.agents.schemas import ExtractedOpportunity, TailoredResumeResult
 from app.models.job_listing import JobListing
 from app.models.opportunity import Opportunity
 from app.sources.job_boards import dedupe, html_to_text, relevant
-from app.sources.job_signals import batch_years, classify_title, min_experience, user_families
+from app.sources.job_signals import batch_years, classify_title, job_type, min_experience, user_families
 from tests.fakes import FakeLLM
 
 RESUME = "Asha Rao\nasha@example.com\nSkills\nPython, Django, SQL, React, REST APIs, Git\nProjects\n• Built a Django app"
@@ -181,3 +181,71 @@ async def test_refresh_does_not_loop_on_listings_it_no_longer_sees(client, monke
     client.get("/api/jobs/feed", headers=headers)
 
     assert len(calls) == 1
+
+
+# ── job type ─────────────────────────────────────────────────────────────────
+
+def test_job_type_reads_title_board_field_and_description():
+    assert job_type("Software Engineer Intern") == "internship"
+    assert job_type("SDE", hint="Intern") == "internship"
+    assert job_type("Backend Intern", hint="full time") == "internship"  # boards file interns as full time
+    assert job_type("Data Analyst (Part Time)") == "part_time"
+    assert job_type("Research Analyst - 15 Hours/Week") == "part_time"
+    assert job_type("Developer", hint="freelance") == "contract"
+    assert job_type("Developer", hint="FullTime") == "full_time"
+    assert job_type("Developer", description="This is a 6-month internship with a stipend.") == "internship"
+    assert job_type("Developer", description="Our interns love it here. Full-time role.") == "full_time"
+    assert job_type("Template Engineer") == "full_time"
+
+
+async def test_feed_filters_by_job_type_and_counts_each_type(client, monkeypatch):
+    _install(monkeypatch, FAKE_LISTINGS + [
+        _listing(8, "Junior Backend Developer (Part Time)", "SideCo", desc="Python Django REST APIs SQL. Freshers welcome."),
+    ])
+    headers = _user(client, "types@example.com")
+
+    feed = client.get("/api/jobs/feed", headers=headers).json()
+    assert feed["job_types"]["internship"] == 1 and feed["job_types"]["part_time"] == 1
+    assert {i["job_type"] for i in feed["items"]} == {"internship", "part_time"}
+
+    interns = client.get("/api/jobs/feed?job_type=internship", headers=headers).json()
+    assert [i["title"] for i in interns["items"]] == ["Software Engineer Intern - Backend"]
+    assert interns["hidden"]["job_type"] == 1
+    assert interns["job_types"] == feed["job_types"]  # counts ignore the type filter
+
+    assert client.get("/api/jobs/feed?job_type=gig", headers=headers).status_code == 422
+
+
+async def test_search_words_match_skills_and_skip_type_words(client, monkeypatch):
+    _install(monkeypatch)
+    headers = _user(client, "words@example.com")
+    titles = [i["title"] for i in client.get("/api/jobs/feed?q=django%20internship", headers=headers).json()["items"]]
+    assert titles == ["Software Engineer Intern - Backend"]  # "django" is a skill, not in the title
+
+
+async def test_web_search_adds_new_listings_to_the_feed(client, monkeypatch):
+    _install(monkeypatch)
+    headers = _user(client, "web@example.com")
+    client.get("/api/jobs/feed", headers=headers)  # warm the cache
+    searched = []
+
+    async def fake_search(q, job_type=None):
+        searched.append((q, job_type))
+        found = _listing(20, "Python Developer Intern", "WebCo", desc="Python Django SQL REST APIs. 6-month internship.")
+        return [{**found, "source": "remotive", "employment": ""}], {"remotive": "ok (1)"}
+
+    monkeypatch.setattr("app.api.routes.jobs.search_web", fake_search)
+    resp = client.post("/api/jobs/search", json={"q": "python", "job_type": "internship"}, headers=headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["found"] == 1 and body["new"] == 1 and len(body["new_ids"]) == 1
+    assert searched == [("python", "internship")]
+
+    feed = client.get("/api/jobs/feed?job_type=internship&q=python", headers=headers).json()
+    assert body["new_ids"][0] in {i["id"] for i in feed["items"]}
+
+    # Same search again soon: throttled per user, then answered from the cache.
+    assert client.post("/api/jobs/search", json={"q": "python", "job_type": "internship"}, headers=headers).status_code == 429
+    monkeypatch.setattr("app.api.routes.jobs.SEARCH_COOLDOWN", 0)
+    assert client.post("/api/jobs/search", json={"q": "python", "job_type": "internship"}, headers=headers).json()["cached"]
+    assert len(searched) == 1

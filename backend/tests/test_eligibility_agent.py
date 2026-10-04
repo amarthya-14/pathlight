@@ -183,3 +183,43 @@ async def test_experience_unknown_in_profile_is_missing_information(client, monk
 
     assert result.decision == EligibilityDecision.UNCERTAIN
     assert "work experience" in result.missing_information[0]
+
+
+async def test_branch_spellings_are_the_same_branch(client, monkeypatch):
+    monkeypatch.setattr("app.agents.eligibility.get_strong_llm", _fail_if_llm_called)
+    for student, allowed in [
+        ("CSE", ["B.Tech CSE"]),
+        ("CSE", ["Computer Science and Engineering", "IT"]),
+        ("B.E. Computer Science", ["CSE"]),
+        ("IT", ["CS/IT"]),
+        ("ECE", ["Circuit branches"]),
+        ("AI & ML", ["CSE"]),  # a CSE specialisation counts as CSE
+    ]:
+        requirements = OpportunityRequirements(allowed_branches=allowed, min_experience_years=0)
+        profile = Profile(user_id=PydanticObjectId(), cgpa=9.0, branch=student)
+        result, _ = await run_eligibility(requirements, profile, str(PydanticObjectId()), str(PydanticObjectId()))
+        assert result.decision == EligibilityDecision.ELIGIBLE, (student, allowed, result.evidence)
+
+
+async def test_other_branches_and_specialisations_still_fail(client, monkeypatch):
+    monkeypatch.setattr("app.agents.eligibility.get_strong_llm", _fail_if_llm_called)
+    for student, allowed in [("CSE", ["CSE (AI & ML)"]), ("EEE", ["ECE"]), ("ME", ["Circuit branches"])]:
+        requirements = OpportunityRequirements(allowed_branches=allowed)
+        profile = Profile(user_id=PydanticObjectId(), cgpa=9.0, branch=student)
+        result, _ = await run_eligibility(requirements, profile, str(PydanticObjectId()), str(PydanticObjectId()))
+        assert result.decision == EligibilityDecision.NOT_ELIGIBLE, (student, allowed)
+
+
+async def test_percentage_requirement_is_not_read_as_cgpa(client, monkeypatch):
+    monkeypatch.setattr("app.agents.eligibility.get_strong_llm", _fail_if_llm_called)
+    uid, oid = str(PydanticObjectId()), str(PydanticObjectId())
+
+    def profile(cgpa):
+        return Profile(user_id=PydanticObjectId(), cgpa=cgpa, branch="CSE")
+
+    passed, _ = await run_eligibility(OpportunityRequirements(min_cgpa=60, min_experience_years=0), profile(8.5), uid, oid)
+    assert passed.decision == EligibilityDecision.ELIGIBLE
+    failed, _ = await run_eligibility(OpportunityRequirements(min_cgpa=75), profile(7.0), uid, oid)
+    assert failed.decision == EligibilityDecision.NOT_ELIGIBLE
+    unsure, _ = await run_eligibility(OpportunityRequirements(min_cgpa=70), profile(7.2), uid, oid)
+    assert unsure.decision == EligibilityDecision.UNCERTAIN

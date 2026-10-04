@@ -12,6 +12,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.llm_client import get_strong_llm
 from app.agents.schemas import EligibilityDecision, EligibilityResult
+from app.core.branches import branch_allowed
 from app.models.agent_execution import AgentExecution
 from app.models.opportunity import OpportunityRequirements
 from app.models.user import Profile
@@ -67,23 +68,37 @@ def _deterministic_check(
     hard_fail = False
 
     if requirements.min_cgpa is not None:
+        required = requirements.min_cgpa
         if profile.cgpa is None:
             missing.append("Profile CGPA is not set")
-        elif profile.cgpa < requirements.min_cgpa:
-            evidence.append(f"Requires CGPA >= {requirements.min_cgpa}, profile has {profile.cgpa}")
+        elif required > 10:
+            # "60% aggregate" extracted as 60 — a percentage, not a CGPA. Conversions vary by
+            # university (x9.5 is common, x10 at most), so only clear cases decide.
+            if profile.cgpa * 9.5 >= required:
+                evidence.append(f"Requires {required:g}%, your CGPA {profile.cgpa} is about {profile.cgpa * 9.5:.0f}%")
+            elif profile.cgpa * 10 < required:
+                evidence.append(f"Requires {required:g}%, your CGPA {profile.cgpa} is at most {profile.cgpa * 10:.0f}%")
+                hard_fail = True
+            else:
+                missing.append(f"Posting asks for {required:g}%; check your university's CGPA-to-percentage conversion")
+        elif profile.cgpa < required:
+            evidence.append(f"Requires CGPA >= {required}, profile has {profile.cgpa}")
             hard_fail = True
         else:
-            evidence.append(f"CGPA requirement met: {profile.cgpa} >= {requirements.min_cgpa}")
+            evidence.append(f"CGPA requirement met: {profile.cgpa} >= {required}")
 
     if requirements.allowed_branches:
-        allowed_lower = [b.strip().lower() for b in requirements.allowed_branches]
-        if profile.branch is None:
+        allowed = requirements.allowed_branches
+        fits = branch_allowed(profile.branch, allowed) if profile.branch and profile.branch.strip() else None
+        if not (profile.branch and profile.branch.strip()):
             missing.append("Profile branch is not set")
-        elif profile.branch.strip().lower() not in allowed_lower:
-            evidence.append(f"Branch '{profile.branch}' not in allowed list {requirements.allowed_branches}")
+        elif fits is False:
+            evidence.append(f"Branch '{profile.branch}' not in allowed list {allowed}")
             hard_fail = True
+        elif fits is None:
+            missing.append(f"Couldn't tell whether '{profile.branch}' is one of the allowed branches {allowed}")
         else:
-            evidence.append(f"Branch requirement met: {profile.branch}")
+            evidence.append(f"Branch requirement met: {profile.branch} (allowed: {', '.join(allowed)})")
 
     if requirements.min_experience_years is not None:
         required = requirements.min_experience_years

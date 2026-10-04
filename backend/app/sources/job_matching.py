@@ -10,6 +10,8 @@ A listing is shown only if it passes every gate:
 3. Batch:      "2025 batch only" is hidden from the 2027 batch.
 4. Freshness:  posted within the chosen window (default 30 days).
 5. Match %:    at or above the chosen threshold (default 60%).
+6. Job type:   internship / full-time / part-time, when the student picks one. Counted
+               per type before this gate, so the UI can show "Internships 12".
 
 Match % (0-100) is about the RESUME: 55% skill coverage (skills the posting asks for that
 the resume shows), 30% field fit, 15% level fit. Every hidden listing is counted by reason,
@@ -20,7 +22,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from app.core.ats import has_skill
-from app.sources.job_signals import _TITLE_ENTRY, classify_title, compatible, is_senior_title
+from app.sources.job_signals import _TITLE_ENTRY, classify_title, compatible, is_senior_title, job_type
 
 # No one- or two-letter languages ("R", "Go"): they match "R&D" and "Go beyond" in prose.
 SKILL_VOCAB = [
@@ -70,6 +72,7 @@ class Filters:
     min_match: int = 60
     days: int = 30
     include_experienced: bool = False
+    job_type: str | None = None  # None = every type
 
 
 @dataclass
@@ -87,6 +90,7 @@ HIDDEN_REASONS = {
     "batch": "for other batches",
     "old": "posted too long ago",
     "low_match": "below your match threshold",
+    "job_type": "a different job type",
     "dismissed": "you hid",
 }
 
@@ -181,11 +185,17 @@ def _location_boost(listing, student: Student) -> int:
     return 0
 
 
+def listing_type(listing) -> str:
+    return listing.job_type or job_type(listing.title)
+
+
 def rank(listings, student: Student, filters: Filters, dismissed: set[str], limit: int = 80):
-    """Returns (shown matches, hidden counts by reason, total that passed)."""
+    """Returns (shown matches, hidden counts by reason, total that passed, matches per
+    job type before the type filter)."""
     now = datetime.now(timezone.utc)
     shown: list[Match] = []
     hidden = {key: 0 for key in HIDDEN_REASONS}
+    by_type: dict[str, int] = {}
     for listing in listings:
         if f"{listing.source}:{listing.external_id}" in dismissed:
             hidden["dismissed"] += 1
@@ -193,8 +203,13 @@ def rank(listings, student: Student, filters: Filters, dismissed: set[str], limi
         match, reason = evaluate(listing, student, filters, now)
         if match is None:
             hidden[reason] += 1
-        else:
-            shown.append(match)
+            continue
+        kind = listing_type(listing)
+        by_type[kind] = by_type.get(kind, 0) + 1
+        if filters.job_type and kind != filters.job_type:
+            hidden["job_type"] += 1
+            continue
+        shown.append(match)
 
     def recency(m: Match) -> float:
         p = m.listing.posted_at
@@ -212,4 +227,4 @@ def rank(listings, student: Student, filters: Filters, dismissed: set[str], limi
         out.append(m)
         if len(out) >= limit:
             break
-    return out, hidden, len(shown)
+    return out, hidden, len(shown), by_type
