@@ -64,6 +64,9 @@ class Profile(Document):
     autopilot_enabled: bool = False
     autopilot_min_match: int = 75
     autopilot_last_run: str | None = None  # IST date of the last run
+    # Skills the student confirmed they know but their resume doesn't show (ticked on a
+    # tailored resume's ATS panel). The Resume Tailor may add these to Technical Skills.
+    extra_skills: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

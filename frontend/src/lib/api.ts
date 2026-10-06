@@ -197,8 +197,11 @@ export const api = {
 
   getTailoredResume: (applicationId: string) =>
     request<TailoredResumeOut>(`/api/applications/${applicationId}/tailored-resume`),
-  tailorApplication: (applicationId: string) =>
-    request<TailoredResumeOut>(`/api/applications/${applicationId}/tailor`, { method: "POST" }),
+  tailorApplication: (applicationId: string, addSkills: string[] = []) =>
+    request<TailoredResumeOut>(`/api/applications/${applicationId}/tailor`, {
+      method: "POST",
+      body: { add_skills: addSkills },
+    }),
   downloadTailoredResumePdf: (applicationId: string) =>
     requestFile(`/api/applications/${applicationId}/tailored-resume.pdf`),
   recheckApplication: (applicationId: string, jobDescription?: string) =>

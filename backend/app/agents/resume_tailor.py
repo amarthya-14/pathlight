@@ -26,7 +26,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.agents.llm_client import get_strong_llm
 from app.agents.schemas import SkillGapResult, TailoredResumeResult
-from app.core.ats import AtsReport, has_skill, literal_mention, score_resume
+from app.core.ats import AtsReport, _norm, has_skill, literal_mention, score_resume
 from app.core.resume_links import visible_urls
 from app.models.agent_execution import AgentExecution
 from app.models.opportunity import OpportunityRequirements
@@ -54,7 +54,8 @@ links or "[View Badge]"-style labels.
 - Keep ALL content: every job, project, bullet, skill category, skill and \
 certification from the original must still be there (reordered and reworded is fine; \
 tightening a bullet is fine; deleting one is not). The candidate decides what to cut, not you.
-- skills_emphasized must only list skills that literally appear in the original resume.
+- skills_emphasized must only list skills that appear in the original resume, are listed \
+under "SKILLS THE RESUME IMPLIES" or "SKILLS THE CANDIDATE CONFIRMED".
 - No inflation: don't upgrade claims with words the resume doesn't support (e.g. \
 "scalable", "robust", "production-ready", "deployed", "led", "expert", "proficient", \
 "track record", "successfully") — say what was done, as the resume says it.
@@ -71,6 +72,12 @@ spelling (e.g. the resume says "RESTful API endpoints" and the posting says "RES
 -> write "REST APIs"). ATS matching is literal.
 - Technical Skills: put the skills the posting asks for (that the resume has) first in \
 each category.
+- Add every skill listed under "SKILLS THE RESUME IMPLIES" and "SKILLS THE CANDIDATE \
+CONFIRMED" to the Technical Skills section, in the posting's exact wording, inside the \
+best-fitting existing category (or a new category line if none fits). These are honest: \
+the resume already proves the implied ones (a Django project proves Python) and the \
+candidate has personally confirmed knowing the others. Add them ONLY to Technical Skills \
+and the Summary — never invent a project, bullet, employer or metric for them.
 - Every Experience/Project bullet starts with "• " and a strong past-tense action verb \
 (Built, Designed, Developed, Implemented, Improved, Optimized, Automated...). One bullet \
 per line. Keep existing numbers; never invent new ones.
@@ -139,6 +146,7 @@ def _build_prompt(
     requirements: OpportunityRequirements,
     skill_gap: SkillGapResult | None,
     job_description: str | None,
+    confirmed_skills: list[str] | None = None,
 ) -> str:
     lines = [
         f"JOB: {role} at {company}",
@@ -147,9 +155,20 @@ def _build_prompt(
     ]
     if requirements.raw_eligibility_text:
         lines.append(f"Other requirements: {requirements.raw_eligibility_text}")
+    evidence = evidence_text(base_text, confirmed_skills)
+    posting_skills = dict.fromkeys(s.strip() for s in requirements.required_skills + requirements.preferred_skills if s and s.strip())
+    implied = [s for s in posting_skills if not has_skill(base_text, s, implied=False) and has_skill(base_text, s)]
+    confirmed = [s for s in posting_skills if not has_skill(base_text, s) and has_skill(evidence, s)]
+    # Confirmed skills the posting doesn't name still belong in Technical Skills.
+    confirmed += [s for s in (confirmed_skills or []) if s.strip() and not any(_norm(s) == _norm(c) for c in confirmed)]
+    if implied:
+        lines.append(f"SKILLS THE RESUME IMPLIES (add to Technical Skills): {', '.join(implied)}")
+    if confirmed:
+        lines.append(f"SKILLS THE CANDIDATE CONFIRMED (add to Technical Skills): {', '.join(confirmed)}")
     if skill_gap is not None:
         lines.append(f"Skills the resume shows (from skill-gap analysis): {', '.join(skill_gap.matched) or 'none'}")
-        lines.append(f"Skills the resume does NOT show — never add these: {', '.join(skill_gap.missing) or 'none'}")
+        absent = [s for s in skill_gap.missing if not has_skill(evidence, s)]
+        lines.append(f"Skills the resume does NOT show — never add these: {', '.join(absent) or 'none'}")
     if job_description and job_description.strip():
         lines.append("")
         lines.append("FULL JOB DESCRIPTION (mirror its wording for skills the resume genuinely has):")
@@ -158,6 +177,13 @@ def _build_prompt(
     lines.append("ORIGINAL RESUME (the only source of truth):")
     lines.append(base_text)
     return "\n".join(lines)
+
+
+def evidence_text(base_text: str, confirmed_skills: list[str] | None) -> str:
+    """The resume plus skills the candidate confirmed they know. Everything that decides
+    what's honest (fabrication guard, ATS fixable vs blocked) reads this, not base_text."""
+    skills = [s.strip() for s in confirmed_skills or [] if s and s.strip()]
+    return f"{base_text}\n\nAdditional skills (confirmed by candidate): {', '.join(skills)}" if skills else base_text
 
 
 def _content_kept(base_text: str, tailored_text: str) -> float:
@@ -235,6 +261,7 @@ async def run_resume_tailor(
     requirements: OpportunityRequirements,
     skill_gap: SkillGapResult | None,
     job_description: str | None = None,
+    confirmed_skills: list[str] | None = None,
 ) -> tuple[TailoredResumeResult, AtsReport, AgentExecution]:
     """Tailors the resume in a generate -> score -> revise loop:
     each attempt is checked by the fabrication guard (hard reject) and scored by the
@@ -243,17 +270,23 @@ async def run_resume_tailor(
     the next attempt gets precise feedback. Stops at the honest maximum
     (100 - points blocked by skills the user doesn't have) or after MAX_ATTEMPTS, keeping
     the best-scoring honest attempt. Logs one AgentExecution for the whole run and raises
-    RuntimeError if no attempt was honest."""
+    RuntimeError if no attempt was honest.
+
+    `confirmed_skills` are skills the candidate told Pathlight they know but their resume
+    doesn't show; they count as evidence (allowed in Technical Skills, scored as fixable)."""
     start = time.monotonic()
     structured_llm = get_strong_llm().with_structured_output(TailoredResumeResult)
     candidate_skills = list(requirements.required_skills) + list(requirements.preferred_skills)
     if skill_gap is not None:
         candidate_skills += list(skill_gap.missing) + list(skill_gap.weak)
     base_urls = visible_urls(base_text)
+    evidence = evidence_text(base_text, confirmed_skills)
 
     messages = [
         SystemMessage(content=TAILOR_SYSTEM_PROMPT),
-        HumanMessage(content=_build_prompt(base_text, role, company, requirements, skill_gap, job_description)),
+        HumanMessage(
+            content=_build_prompt(base_text, role, company, requirements, skill_gap, job_description, confirmed_skills)
+        ),
     ]
 
     best: tuple[TailoredResumeResult, AtsReport] | None = None
@@ -267,9 +300,9 @@ async def run_resume_tailor(
             errors.append(f"llm_error: {e}")
             continue
         candidate.tailored_text = _clean_text(candidate.tailored_text)
-        fabricated = find_fabricated_skills(base_text, candidate, candidate_skills)
+        fabricated = find_fabricated_skills(evidence, candidate, candidate_skills)
         report = score_resume(
-            candidate.tailored_text, role, requirements.required_skills, requirements.preferred_skills, base_text
+            candidate.tailored_text, role, requirements.required_skills, requirements.preferred_skills, evidence
         )
         tailored_urls = set(visible_urls(candidate.tailored_text))
         dropped = [u for u in base_urls if u not in tailored_urls]
@@ -302,9 +335,11 @@ async def run_resume_tailor(
         # skill in its own words (matched by skill name, not exact wording — a real
         # Gemini run phrased it differently and produced duplicates).
         llm_warnings = list(result.warnings)
-        result.warnings = llm_warnings + [
+        result.warnings = [w for w in llm_warnings if not any(
+            mentions_skill(w, s) and has_skill(evidence, s) for s in candidate_skills
+        )] + [
             warning
-            for skill, warning in _absent_skill_warnings(base_text, requirements)
+            for skill, warning in _absent_skill_warnings(evidence, requirements)
             if not any(mentions_skill(w, skill) for w in llm_warnings)
         ]
         result.confidence = max(0.0, min(1.0, result.confidence))
