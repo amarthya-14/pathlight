@@ -52,8 +52,30 @@ const ATS_PARTS: { key: keyof AtsReport["breakdown"]; label: string; max: number
 ];
 
 // The tailored resume's ATS score, with the honest ceiling spelled out: points that
-// need skills the user doesn't have are named, never earned by inventing them.
-export function AtsPanel({ ats, onDownload }: { ats: AtsReport; onDownload?: () => void }) {
+// need skills the resume doesn't show are named, never earned by inventing them. The user
+// can tick the ones they genuinely know; the tailor then adds those to Technical Skills.
+export function AtsPanel({
+  ats,
+  onDownload,
+  onAddSkills,
+}: {
+  ats: AtsReport;
+  onDownload?: () => void;
+  onAddSkills?: (skills: string[]) => Promise<void>;
+}) {
+  const [picked, setPicked] = useState<string[]>([]);
+  const [adding, setAdding] = useState(false);
+  const toggle = (s: string) => setPicked((p) => (p.includes(s) ? p.filter((x) => x !== s) : [...p, s]));
+  const addPicked = async () => {
+    if (!onAddSkills || picked.length === 0) return;
+    setAdding(true);
+    try {
+      await onAddSkills(picked);
+      setPicked([]);
+    } finally {
+      setAdding(false);
+    }
+  };
   const ceiling = 100 - ats.blocked_points;
   const atCeiling = ats.score >= ceiling;
   const tone = ats.score >= 90 ? "ok" : ats.score >= 75 ? "accent" : "warn";
@@ -90,12 +112,46 @@ export function AtsPanel({ ats, onDownload }: { ats: AtsReport; onDownload?: () 
             );
           })}
         </div>
-        {ats.missing_keywords.length > 0 && (
+        {ats.missing_keywords.length > 0 && !onAddSkills && (
           <p className="mt-3 text-[12.5px] leading-relaxed text-muted">
             <span className="font-medium text-fg">{ats.blocked_points} points need skills that aren&apos;t on your resume</span> —{" "}
             {ats.missing_keywords.join(", ")}. Pathlight won&apos;t claim them for you; learn them (see your prep plan) and
             re-tailor to reach {Math.min(100, ats.score + ats.blocked_points)}.
           </p>
+        )}
+        {ats.missing_keywords.length > 0 && onAddSkills && (
+          <div className="mt-3 text-[12.5px] leading-relaxed text-muted">
+            <p>
+              <span className="font-medium text-fg">{ats.blocked_points} points need skills your resume doesn&apos;t show.</span>{" "}
+              Tick the ones you genuinely know and they&apos;ll be added to your Technical Skills — you&apos;ll be asked
+              about them in interviews.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {ats.missing_keywords.map((s) => {
+                const on = picked.includes(s);
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => toggle(s)}
+                    aria-pressed={on}
+                    className={cx(
+                      "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs transition-colors",
+                      on ? "border-accent bg-accent/10 text-fg" : "border-line text-muted hover:text-fg"
+                    )}
+                  >
+                    {on && <Check size={12} />}
+                    {s}
+                  </button>
+                );
+              })}
+            </div>
+            {picked.length > 0 && (
+              <Button className="mt-2.5" size="sm" onClick={addPicked} loading={adding} disabled={adding}>
+                {adding ? "Re-tailoring…" : `Add ${picked.length} skill${picked.length > 1 ? "s" : ""} & re-tailor`}
+              </Button>
+            )}
+          </div>
         )}
         {!atCeiling && ats.suggestions.length > 0 && (
           <ul className="mt-3 space-y-1 text-[12.5px] text-muted">
@@ -231,6 +287,18 @@ export function ReviewApplyCard({
         {tailored.ats && (
           <AtsPanel
             ats={tailored.ats}
+            onAddSkills={
+              onTailoredChange
+                ? async (skills) => {
+                    setError(null);
+                    try {
+                      onTailoredChange(await api.tailorApplication(application.id, skills));
+                    } catch (err) {
+                      setError(err instanceof ApiError ? err.detail : "Couldn't re-tailor your resume");
+                    }
+                  }
+                : undefined
+            }
             onDownload={async () => {
               try {
                 const { blob, filename } = await api.downloadTailoredResumePdf(application.id);
@@ -242,8 +310,8 @@ export function ReviewApplyCard({
           />
         )}
         <div className="flex items-center gap-2 text-[13px] text-ok">
-          <ShieldCheck size={14} className="shrink-0" /> Checked: this resume claims no skill that isn&apos;t on your
-          original.
+          <ShieldCheck size={14} className="shrink-0" /> Checked: every skill here is on your original, implied by it,
+          or confirmed by you.
         </div>
         {tailored.warnings.length > 0 && (
           <ul className="space-y-1.5 rounded-lg bg-warn-soft px-3.5 py-2.5 text-[13px] text-warn">

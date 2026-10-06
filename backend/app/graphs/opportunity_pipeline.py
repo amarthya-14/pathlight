@@ -350,7 +350,23 @@ NO_RESUME_NOTE = (
 )
 
 
-async def tailor_application(application: Application, skill_gap: SkillGapResult | None) -> tuple[TailoredResume | None, str | None]:
+async def confirmed_skills_for(user_id: str, add_skills: list[str] | None = None) -> list[str]:
+    """The user's confirmed-but-not-on-resume skills, after saving any newly ticked ones."""
+    profile = await Profile.find_one(Profile.user_id == PydanticObjectId(user_id))
+    new = [s.strip()[:60] for s in add_skills or [] if s and s.strip()]
+    if profile is None:
+        return new
+    known = {s.lower() for s in profile.extra_skills}
+    added = [s for s in dict.fromkeys(new) if s.lower() not in known]
+    if added:
+        profile.extra_skills = (profile.extra_skills + added)[-60:]
+        await profile.save()
+    return list(profile.extra_skills)
+
+
+async def tailor_application(
+    application: Application, skill_gap: SkillGapResult | None, add_skills: list[str] | None = None
+) -> tuple[TailoredResume | None, str | None]:
     """Generates (or regenerates) the TailoredResume for one application and moves it to
     READY_TO_APPLY. Shared by the pipeline node and the on-demand route
     (POST /api/applications/{id}/tailor — e.g. after uploading a resume for postings that
@@ -373,6 +389,8 @@ async def tailor_application(application: Application, skill_gap: SkillGapResult
             "tomorrow (the limit keeps Pathlight free for everyone)."
         )
 
+    confirmed_skills = await confirmed_skills_for(user_id, add_skills)
+
     opportunity = await Opportunity.get(application.opportunity_id)
     company = await Company.get(opportunity.company_id)
     requirements = opportunity.requirements or OpportunityRequirements()
@@ -392,6 +410,7 @@ async def tailor_application(application: Application, skill_gap: SkillGapResult
             requirements,
             skill_gap,
             job_description=opportunity.description,
+            confirmed_skills=confirmed_skills,
         )
     except Exception as e:
         # Already logged via AgentExecution (including fabrication-guard rejections).

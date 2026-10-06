@@ -22,7 +22,14 @@ from app.core.ats import has_skill, score_resume
 from app.core.usage import consume_or_429, friendly_llm_error
 from app.core.resume_pdf import render_resume_pdf
 from app.models.user import Profile
-from app.graphs.opportunity_pipeline import NO_RESUME_NOTE, latest_resume, recheck_application, tailor_application
+from app.agents.resume_tailor import evidence_text
+from app.graphs.opportunity_pipeline import (
+    NO_RESUME_NOTE,
+    confirmed_skills_for,
+    latest_resume,
+    recheck_application,
+    tailor_application,
+)
 from app.integrations.google_oauth import get_gmail_integration
 from app.mcp.gmail_client import mcp_send_application_email
 from app.models.application import REVIEW_DECIDED_STAGES, Application, ApplicationStage, ApplicationStatusEvent
@@ -39,6 +46,7 @@ from app.schemas.application import (
     ReviewResponse,
     StatusUpdateRequest,
     TailoredEditRequest,
+    TailorRequest,
     TailoredResumeOut,
 )
 
@@ -189,10 +197,13 @@ async def recheck(application_id: str, payload: RecheckRequest, current_user: Us
 
 
 @router.post("/{application_id}/tailor", response_model=TailoredResumeOut)
-async def tailor_application_now(application_id: str, current_user: User = Depends(get_current_user)):
+async def tailor_application_now(
+    application_id: str, payload: TailorRequest | None = None, current_user: User = Depends(get_current_user)
+):
     """(Re)generates the tailored resume on demand — for applications ingested before a
-    resume existed, or after replacing the resume. Same agent, same fabrication guard,
-    same READY_TO_APPLY outcome as the pipeline node."""
+    resume existed, after replacing the resume, or after the user ticked posting skills
+    they know that the resume doesn't show (`add_skills`). Same agent, same fabrication
+    guard, same READY_TO_APPLY outcome as the pipeline node."""
     application = await _get_owned_application(application_id, current_user)
     if any(e.stage in REVIEW_DECIDED_STAGES for e in application.status_history):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="You've already reviewed this application.")
@@ -204,7 +215,9 @@ async def tailor_application_now(application_id: str, current_user: User = Depen
     if await latest_resume(str(current_user.id)) is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=NO_RESUME_NOTE)
 
-    tailored, note = await tailor_application(application, application.skill_gap)
+    tailored, note = await tailor_application(
+        application, application.skill_gap, payload.add_skills if payload else None
+    )
     if tailored is None and note and "today's" in note:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=note)
     if tailored is None:
@@ -274,6 +287,7 @@ async def edit_tailored_resume(
     requirements = (opportunity.requirements if opportunity else None) or OpportunityRequirements()
     base = await Document.get(tailored.base_document_id)
     base_text = base.extracted_text if base and base.extracted_text else ""
+    base_text = evidence_text(base_text, await confirmed_skills_for(str(current_user.id)))
 
     tailored.tailored_text = payload.tailored_text.strip()
     tailored.cover_note = payload.cover_note.strip()

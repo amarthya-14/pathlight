@@ -36,3 +36,4 @@ class ProfileOut(BaseModel):
     autopilot_enabled: bool = False
     autopilot_min_match: int = 75
     autopilot_last_run: str | None = None
+    extra_skills: list[str] = []

@@ -39,6 +39,7 @@ export type ProfileOut = {
   autopilot_enabled: boolean;
   autopilot_min_match: number;
   autopilot_last_run: string | null;
+  extra_skills?: string[];
 };
 
 export type ProfileUpsert = {

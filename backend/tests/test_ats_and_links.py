@@ -2,6 +2,7 @@
 import io
 
 import pypdf
+import pytest
 from fpdf import FPDF
 
 from app.agents.resume_tailor import run_resume_tailor
@@ -175,3 +176,37 @@ def test_inflation_and_lost_skill_lines_are_detected():
     puffed = TailoredResumeResult(tailored_text="Languages: Python\n• Built a scalable app", cover_note="I am an expert.", confidence=1)
     assert find_inflation(base, puffed) == ["scalable", "expert"]
     assert missing_skill_lines(base, puffed.tailored_text) == ["AI/ML & Agentic Systems"]
+
+
+def test_skills_implied_by_the_resume_are_fixable_not_blocked():
+    base = "Jane Doe\nSkills: Django, PostgreSQL, PyTorch\nProjects\n• Built a Django app"
+    report = score_resume(base, "Backend Developer", ["Python", "SQL", "Machine Learning", "Kubernetes"], [], base)
+    assert set(report.fixable_keywords) == {"Python", "SQL", "Machine Learning"}
+    assert report.missing_keywords == ["Kubernetes"]
+    # React does not imply Redux — implication stays near-certain.
+    assert not has_skill("Skills: React", "Redux")
+    assert has_skill("Skills: React", "JavaScript")
+
+
+async def test_confirmed_skills_may_be_added_and_earn_keyword_points(client, monkeypatch):
+    base = GOOD
+    with_k8s = GOOD.replace("Technical Skills", "Technical Skills\nDevOps: Kubernetes")
+    llm = _Sequence([TailoredResumeResult(tailored_text=with_k8s, cover_note="Dear Hiring Team,", confidence=0.8)] * 3)
+    monkeypatch.setattr("app.agents.resume_tailor.get_strong_llm", lambda: llm)
+    requirements = OpportunityRequirements(required_skills=["Python", "Kubernetes"])
+
+    # Without confirmation, adding Kubernetes is fabrication.
+    with pytest.raises(RuntimeError):
+        await run_resume_tailor(
+            "64b7f0000000000000000001", "64b7f0000000000000000002", base, "Backend Developer", "Co",
+            requirements, None,
+        )
+
+    llm.results = [TailoredResumeResult(tailored_text=with_k8s, cover_note="Dear Hiring Team,", confidence=0.8)] * 3
+    result, ats, _ = await run_resume_tailor(
+        "64b7f0000000000000000001", "64b7f0000000000000000002", base, "Backend Developer", "Co",
+        requirements, None, confirmed_skills=["Kubernetes"],
+    )
+    assert "Kubernetes" in ats.matched_keywords and ats.blocked_points == 0
+    assert not any("Kubernetes" in w for w in result.warnings)
+    assert "SKILLS THE CANDIDATE CONFIRMED" in llm.calls[-1][1].content

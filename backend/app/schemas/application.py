@@ -92,6 +92,12 @@ class RecheckRequest(BaseModel):
     job_description: str | None = None
 
 
+class TailorRequest(BaseModel):
+    # Skills the student says they know that the resume doesn't show. Saved to their
+    # profile (so later tailoring and autopilot use them too) and added to Technical Skills.
+    add_skills: list[str] = Field(default_factory=list, max_length=30)
+
+
 class TailoredEditRequest(BaseModel):
     tailored_text: str = Field(min_length=50, max_length=20000)
     cover_note: str = Field(min_length=1, max_length=5000)

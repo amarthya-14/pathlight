@@ -57,6 +57,39 @@ ALIASES: list[set[str]] = [
     {"css", "css3"},
 ]
 
+# Skills a resume demonstrates without naming them: you can't build a Django app without
+# Python, or query PostgreSQL without SQL. Writing the implied skill (in the posting's
+# wording) is honest and earns ATS keyword points. Keep this to near-certain implications
+# — "uses React" implies JavaScript, it does NOT imply Redux.
+IMPLIED_BY: dict[str, set[str]] = {
+    "python": {"django", "flask", "fastapi", "pandas", "numpy", "pytorch", "tensorflow", "keras", "scikit-learn",
+               "sklearn", "langchain", "langgraph", "streamlit", "jupyter", "matplotlib", "seaborn", "opencv"},
+    "javascript": {"react", "react.js", "reactjs", "node.js", "nodejs", "next.js", "nextjs", "express", "express.js",
+                   "vue", "vue.js", "angular", "typescript", "jquery"},
+    "typescript": {"angular", "nestjs"},
+    "react": {"next.js", "nextjs", "react native"},
+    "node.js": {"express", "express.js", "nestjs"},
+    "java": {"spring", "spring boot", "springboot", "hibernate"},
+    "sql": {"postgresql", "postgres", "mysql", "sqlite", "oracle", "sql server", "mariadb"},
+    "html": {"react", "next.js", "angular", "vue", "tailwind", "bootstrap", "jsx"},
+    "css": {"tailwind", "tailwind css", "bootstrap", "sass", "scss"},
+    "rest apis": {"fastapi", "express", "express.js", "django rest framework", "drf", "flask", "spring boot"},
+    "machine learning": {"scikit-learn", "sklearn", "pytorch", "tensorflow", "keras", "xgboost", "deep learning"},
+    "deep learning": {"pytorch", "tensorflow", "keras", "cnn", "rnn", "lstm", "transformers"},
+    "nlp": {"transformers", "hugging face", "huggingface", "bert", "spacy", "nltk"},
+    "computer vision": {"opencv", "yolo", "cnn"},
+    "llms": {"langchain", "langgraph", "openai api", "gpt", "rag", "gemini api", "llama"},
+    "generative ai": {"langchain", "langgraph", "llm", "llms", "rag", "openai api"},
+    "nosql": {"mongodb", "redis", "dynamodb", "cassandra", "firebase", "firestore"},
+    "databases": {"sql", "mysql", "postgresql", "mongodb", "sqlite", "redis"},
+    "cloud": {"aws", "gcp", "azure", "google cloud"},
+    "docker": {"docker compose", "docker-compose", "dockerfile"},
+    "data analysis": {"pandas", "numpy", "power bi", "tableau"},
+    "data visualization": {"matplotlib", "seaborn", "plotly", "power bi", "tableau"},
+    "linux": {"bash", "shell scripting", "ubuntu"},
+    "oop": {"java", "c++", "c#"},
+}
+
 KNOWN_SECTIONS = {
     "summary": ("summary", "profile", "objective", "about me", "professional summary"),
     "education": ("education", "academic"),
@@ -106,9 +139,23 @@ def aliases_of(term: str) -> frozenset[str]:
     return frozenset({key})
 
 
-def has_skill(text: str, term: str) -> bool:
-    """True if the text shows this skill under ANY common spelling."""
-    return any(literal_mention(text, alias) for alias in aliases_of(term)) or literal_mention(text, term)
+@lru_cache(maxsize=4096)
+def implied_by(term: str) -> frozenset[str]:
+    """Resume terms that demonstrate `term` without naming it (see IMPLIED_BY)."""
+    found: set[str] = set()
+    for alias in aliases_of(term):
+        for key, evidence in IMPLIED_BY.items():
+            if alias in aliases_of(key):
+                found |= evidence
+    return frozenset(found)
+
+
+def has_skill(text: str, term: str, implied: bool = True) -> bool:
+    """True if the text shows this skill under ANY common spelling, or (with `implied`)
+    shows a skill that can't be used without it (Django -> Python)."""
+    if any(literal_mention(text, alias) for alias in aliases_of(term)) or literal_mention(text, term):
+        return True
+    return implied and any(literal_mention(text, e) for e in implied_by(term))
 
 
 @dataclass
@@ -183,7 +230,9 @@ def score_resume(
         blocked_points = 0
     if fixable:
         suggestions.append(
-            "Use the posting's exact wording for skills you already have: " + ", ".join(fixable)
+            "These skills are already shown by your resume (directly, under another name, or by a tool "
+            "that requires them) — write them in the posting's exact wording, e.g. in Technical Skills: "
+            + ", ".join(fixable)
         )
 
     # ── Job title (5) ────────────────────────────────────────────────────────────
