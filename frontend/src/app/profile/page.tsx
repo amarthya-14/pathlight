@@ -10,6 +10,7 @@ import { AiKeysCard } from "@/components/AiKeysCard";
 import { ChipPicker } from "@/components/Chips";
 import { useToast } from "@/components/Toast";
 import { Alert, Button, Card, Field, PageHeader, PageSkeleton, Progress, TextArea, TextInput } from "@/components/ui";
+import { PlacementRulesCard } from "@/components/PlacementRulesCard";
 
 const BRANCHES = ["CSE", "IT", "AI & DS", "AI & ML", "ECE", "EEE", "EIE", "ME", "CE", "Chemical", "Biotech"];
 const EXPERIENCE = [
@@ -357,6 +358,11 @@ export default function ProfilePage() {
       <AiKeysCard />
 
       <AutopilotCard profile={profile} onSaved={(p) => {
+        setProfile(p);
+        setContextProfile(p);
+      }} />
+
+      <PlacementRulesCard profile={profile} onSaved={(p) => {
         setProfile(p);
         setContextProfile(p);
       }} />

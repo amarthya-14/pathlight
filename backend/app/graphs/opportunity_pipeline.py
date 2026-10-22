@@ -185,7 +185,8 @@ async def _eligibility_node(state: PipelineState) -> PipelineState:
     for _ in range(MAX_ATTEMPTS):
         try:
             eligibility_result, _ = await run_eligibility(
-                requirements, profile, state["user_id"], str(opportunity.id), role=opportunity.role
+                requirements, profile, state["user_id"], str(opportunity.id), role=opportunity.role,
+                description=opportunity.description,
             )
             break
         except Exception as e:
