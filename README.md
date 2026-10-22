@@ -1,57 +1,91 @@
 # Pathlight
 
-**Autonomous Career & Opportunity Intelligence Platform** — solo capstone project.
+**Autonomous career and opportunity intelligence for students.** Solo capstone project.
 
-Pathlight continuously monitors a student's professional ecosystem — resumes, placement
-emails, skills, deadlines — and proactively surfaces ranked opportunities, skill gaps,
-preparation plans, and application tracking. It is not a chatbot or a resume grader; it
-is an event-driven, agentic system with MCP-based tool access at its core.
+**Live:** [pathlight-iota.vercel.app](https://pathlight-iota.vercel.app) · **API:** FastAPI on Render · **DB:** MongoDB Atlas
 
-> Formerly prototyped under the working name "OIE." Renamed to **Pathlight** at Gate 1.
-> Originally scoped for a 4-person team with a Spring Boot + FastAPI split; now built
-> solo as a single FastAPI + LangGraph + MCP service. See `docs/ARCHITECTURE.md` Rev 2.
+![Pathlight application review: tailored resume diff, cover note, eligibility score](docs/assets/pathlight.webp)
 
-## Status
+Pathlight watches a student's professional picture (resumes, placement emails, skills, deadlines) and on its own surfaces ranked opportunities, eligibility verdicts, skill gaps, preparation plans and tailored resumes. It is an event-driven agentic system with MCP tool access at its core, not a chatbot and not a resume grader.
 
-Gate 1 complete (architecture finalized, repo scaffolded). No feature implementation yet.
+It never applies on its own: every application is sent **only after the student reviews the tailored resume and approves it**.
 
-## Repository Structure
+## What it does
+
+- **Sources openings** from job boards and from placement emails in Gmail, and extracts structured fields (company, role, CGPA cutoff, allowed branches, deadline, skills).
+- **Checks eligibility** with deterministic rules first (CGPA, branch, experience) and calls the LLM only for qualitative criteria a rule can't decide.
+- **Finds skill gaps** by matching the posting's skills against the student's resume with embedding search, plus public GitHub repos as extra evidence.
+- **Plans preparation** in prerequisite order and creates reminders before deadlines.
+- **Tailors the resume** to each posting without inventing skills. This is enforced in code, not just in the prompt: if the tailored text claims a posting skill the base resume doesn't have, the attempt is rejected and retried, and the agent fails rather than return a fabricated resume.
+
+## Architecture
 
 ```
-pathlight/
-├── backend/          # FastAPI + LangGraph + MCP — single service: API, agents, tools, DB
-├── frontend/          # Next.js — dashboard
-├── infra/              # Docker Compose, deployment config
-└── docs/                # Architecture, API, database, AI design, security, evaluation, deployment
+job boards / Gmail / pasted JD
+        │
+        ▼
+ LangGraph pipeline ─────────────────────────────────────────────────────────────┐
+  discovery → persist → eligibility → skill_gap → planner → resume_tailor → END   │
+      └─(extraction failed)→ needs_human_review → END                     │
+        │                                                                          │
+        ├── MCP servers: Gmail · GitHub (read-only) · filesystem (sandboxed) · reminders
+        ├── ChromaDB: resume chunks + embeddings for skill matching (RAG)
+        └── LLM client: student's own keys first, then shared Gemini keys (fallback chain)
+        │
+        ▼
+ FastAPI + MongoDB (Beanie) ── JWT auth ── Next.js dashboard
 ```
 
-## Quick Start (once components exist)
+| Part | Implementation |
+|---|---|
+| Agents | 5 LangGraph agents: Discovery, Eligibility, Skill Gap, Planner, Resume Tailor (`backend/app/agents/`, `backend/app/graphs/`) |
+| Tools | 4 MCP servers: Gmail, GitHub, filesystem, reminders (`backend/app/mcp/`) |
+| Retrieval | Resume chunking → embeddings → ChromaDB (`backend/app/retrieval/`) |
+| LLM access | One client, one fallback chain: the student's own keys (Gemini, Groq, OpenAI, Anthropic or any OpenAI-compatible API) first, then the server's Gemini keys, strong model before small. Quota errors, overloads and bad keys fall through to the next link (`backend/app/agents/llm_client.py`) |
+| Backend | FastAPI, MongoDB via Beanie, JWT auth, Docker |
+| Frontend | Next.js, TypeScript |
+| Deployment | Vercel (frontend), Render (backend, Docker), MongoDB Atlas, GitHub Actions cron for Gmail polling |
+
+## Evaluation
+
+A labeled benchmark harness lives in `backend/eval/`. Latest run ([full report](backend/eval/report.md)):
+
+| Agent | Result |
+|---|---|
+| Discovery (extraction) | 100% accuracy on company, role, compensation, CGPA cutoff and deadline; required-skills F1 0.94 |
+| Eligibility | 87.5% accuracy, **0 false positives** (it never claims eligibility it can't support) |
+| Skill Gap (retrieval) | Match threshold retuned from 0.34 to 0.38 based on the harness's precision/recall sweep |
+
+The benchmarks are small (18 discovery items, 16 eligibility cases) and are being expanded.
+
+## Tests
+
+- **Backend:** 222 pytest tests, with a fake LLM injected so tests never call a real model.
+- **Frontend:** 65 Vitest + React Testing Library tests.
+- In production mode the backend **refuses to start** with a weak JWT secret, a localhost database, or Gmail configured without token encryption (`backend/app/core/config.py`).
+
+## Run locally
 
 ```bash
-cp .env.example .env      # fill in required values
+cp .env.example .env      # fill in GOOGLE_API_KEY, JWT_SECRET, MONGO_URI, ...
 docker compose -f infra/docker/docker-compose.yml up
 ```
 
-Functional starting Gate 2. Right now these are stubs.
+Backend tests: `cd backend && pytest`. Frontend tests: `cd frontend && npm test`.
 
 ## Documentation
 
 | Doc | Purpose |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Full system architecture (Rev 2: solo + MCP-central) |
-| [docs/API.md](docs/API.md) | REST API design |
-| [docs/DATABASE.md](docs/DATABASE.md) | Schema, entities, relationships |
-| [docs/AI_DESIGN.md](docs/AI_DESIGN.md) | Agent architecture, LangGraph state graph, MCP tool plan, model routing |
-| [docs/SECURITY.md](docs/SECURITY.md) | Auth, secrets, privacy model |
-| [docs/EVALUATION.md](docs/EVALUATION.md) | Benchmark datasets, metrics |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Local + cloud deployment |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and what was built at each gate |
+| [docs/AI_DESIGN.md](docs/AI_DESIGN.md) | Agents, LangGraph state graph, MCP tools, model routing |
+| [docs/AUTONOMOUS_APPLICATIONS.md](docs/AUTONOMOUS_APPLICATIONS.md) | Sourcing, tailoring and human-approved applying |
+| [docs/EVALUATION.md](docs/EVALUATION.md) | Benchmark datasets and metrics |
+| [docs/API.md](docs/API.md) | REST API |
+| [docs/DATABASE.md](docs/DATABASE.md) | Schema and entities |
+| [docs/SECURITY.md](docs/SECURITY.md) | Auth, secrets, privacy |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Free-tier deployment and its trade-offs |
 
-## Development Gates
+## Status
 
-Gated development process (Gate 0 → Gate 12) — see `docs/ARCHITECTURE.md` §8. Gates are
-strictly sequential now (solo project, no parallel team lanes) — don't start a gate while
-the previous one is unstable.
-
-## License
-
-TBD — add before any public release.
+Built in sequential gates (`docs/ARCHITECTURE.md` §8). Gates 0–11 are done: backend, ingestion, AI pipeline, RAG, LangGraph workflow, dashboard, testing and evaluation, autonomous applications (email-apply phase) and cloud deployment. Next: security and observability (Gate 12), then the final demonstration.
