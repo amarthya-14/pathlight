@@ -19,6 +19,7 @@ import { diffLines } from "@/lib/diff";
 import type { ApplicationOut, AtsReport, ReviewResponse, TailoredResumeOut } from "@/lib/types";
 import { ScoreRing } from "./Motion";
 import { ConfidenceBar } from "./ConfidenceBar";
+import { ScamWarning } from "./ScamWarning";
 import { Button, buttonClasses, Card, cx, TextArea } from "./ui";
 
 export function applySiteLabel(url: string | null): string {
@@ -206,6 +207,13 @@ export function ReviewApplyCard({
   const [confirming, setConfirming] = useState(false);
   const [submitting, setSubmitting] = useState<"approve" | "skip" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A posting with high-risk scam flags can only be approved after the student says they checked it.
+  const highRisk = application.scam_check?.risk === "high";
+  const [verified, setVerified] = useState(false);
+  const review = (approve: boolean) =>
+    approve && highRisk && verified
+      ? api.reviewApplication(application.id, approve, true)
+      : api.reviewApplication(application.id, approve);
 
   const lines = useMemo(
     () => (tailored.base_resume_text === null ? null : diffLines(tailored.base_resume_text, tailored.tailored_text)),
@@ -228,7 +236,7 @@ export function ReviewApplyCard({
       const { blob, filename } = await api.downloadTailoredResumePdf(application.id);
       saveBlob(blob, filename);
       await copied;
-      onReviewed(await api.reviewApplication(application.id, true));
+      onReviewed(await review(true));
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Something went wrong preparing your application");
     } finally {
@@ -240,7 +248,7 @@ export function ReviewApplyCard({
     setSubmitting(approve ? "approve" : "skip");
     setError(null);
     try {
-      onReviewed(await api.reviewApplication(application.id, approve));
+      onReviewed(await review(approve));
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Review failed");
       setConfirming(false);
@@ -284,6 +292,23 @@ export function ReviewApplyCard({
       </div>
 
       <div className="space-y-3 px-5">
+        {application.scam_check && application.scam_check.risk !== "none" && (
+          <div>
+            <ScamWarning check={application.scam_check} />
+            {highRisk && (
+              <label className="mt-2 flex cursor-pointer items-start gap-2 text-[13px] text-fg">
+                <input
+                  type="checkbox"
+                  checked={verified}
+                  onChange={(e) => setVerified(e.target.checked)}
+                  className="mt-[3px] accent-[var(--bad)]"
+                />
+                I&apos;ve verified this opening on the company&apos;s own site or with my placement cell, and I won&apos;t pay
+                anything to apply.
+              </label>
+            )}
+          </div>
+        )}
         {tailored.ats && (
           <AtsPanel
             ats={tailored.ats}
@@ -453,7 +478,7 @@ export function ReviewApplyCard({
             <Button variant="ghost" onClick={() => submit(false)} disabled={submitting !== null}>
               <SkipForward size={14} /> {submitting === "skip" ? "Skipping…" : "Skip"}
             </Button>
-            <Button onClick={onApproveClick} disabled={submitting !== null}>
+            <Button onClick={onApproveClick} disabled={submitting !== null || (highRisk && !verified)}>
               {application.apply_email ? <Send size={14} /> : <ExternalLink size={14} />}
               {application.apply_email
                 ? "Approve & send"

@@ -26,6 +26,7 @@ import { EligibilityCard } from "@/components/EligibilityCard";
 import { applySiteLabel, FinishApplyPanel, ReviewApplyCard } from "@/components/ReviewApplyCard";
 import { ApplicationKitPanel } from "@/components/ApplicationKit";
 import { SkillGapCard } from "@/components/SkillGapCard";
+import { ScamWarning } from "@/components/ScamWarning";
 import { StatusTimeline } from "@/components/StatusTimeline";
 import { useToast } from "@/components/Toast";
 import { Alert, Badge, Button, buttonClasses, Card, CompanyAvatar, PageSkeleton, SectionLabel, TextArea } from "@/components/ui";
@@ -380,6 +381,10 @@ export default function ApplicationDetailPage() {
                 )}
               </Card>
             </section>
+          )}
+
+          {!decided && lastStage !== "READY_TO_APPLY" && application.scam_check && application.scam_check.risk !== "none" && (
+            <ScamWarning check={application.scam_check} />
           )}
 
           {notEligible && !decided && (

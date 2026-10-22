@@ -57,6 +57,40 @@ const TAILORED: TailoredResumeOut = {
   generated_at: "2026-10-01T00:00:00Z",
 };
 
+describe("ReviewApplyCard scam warnings", () => {
+  beforeEach(() => {
+    reviewMock.mockReset();
+  });
+
+  const SCAM = {
+    risk: "high" as const,
+    flags: [{ code: "fee", label: "Asks for a fee or deposit", severity: "high" as const, evidence: "pay a refundable security deposit of Rs 1,999" }],
+    advice: "Genuine employers never charge students to apply.",
+  };
+
+  it("shows the evidence and only allows approving after the student confirms they checked", async () => {
+    reviewMock.mockResolvedValue({ outcome: "applied", detail: "Sent", application: makeApp() });
+    render(<ReviewApplyCard application={makeApp({ scam_check: SCAM })} tailored={TAILORED} onReviewed={vi.fn()} />);
+    expect(screen.getByText("This posting shows scam warning signs")).toBeInTheDocument();
+    expect(screen.getByText(/refundable security deposit/)).toBeInTheDocument();
+    const approve = screen.getByRole("button", { name: /Approve & send/ });
+    expect(approve).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /verified this opening/ }));
+    fireEvent.click(approve);
+    fireEvent.click(screen.getByRole("button", { name: /Yes, send it/ }));
+    await waitFor(() => expect(reviewMock).toHaveBeenCalledWith("app1", true, true));
+  });
+
+  it("shows a medium-risk note without blocking approval", () => {
+    const medium = { risk: "medium" as const, flags: [{ ...SCAM.flags[0], code: "channel", severity: "medium" as const }], advice: "Worth checking." };
+    render(<ReviewApplyCard application={makeApp({ scam_check: medium })} tailored={TAILORED} onReviewed={vi.fn()} />);
+    expect(screen.getByText("Worth double-checking this posting")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /verified this opening/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Approve & send/ })).toBeEnabled();
+  });
+});
+
 describe("ReviewApplyCard", () => {
   beforeEach(() => {
     // Block body on purpose: a function returned from beforeEach is run as a teardown

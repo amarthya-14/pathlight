@@ -108,6 +108,8 @@ export type ApplicationOut = {
   application_url: string | null;
   min_experience_years: number | null;
   has_job_description: boolean;
+  /** Red flags in the posting (fees, UPI, Google Forms...); null when there are none. */
+  scam_check?: ScamCheck | null;
   eligibility: EligibilityResult | null;
   skill_gap: SkillGapResult | null;
   skill_gap_note: string | null;
@@ -321,4 +323,18 @@ export class ApiError extends Error {
     this.status = status;
     this.detail = detail;
   }
+}
+
+export interface ScamFlag {
+  code: string;
+  label: string;
+  severity: "medium" | "high";
+  /** the posting text that matched, with a little context */
+  evidence: string;
+}
+
+export interface ScamCheck {
+  risk: "none" | "medium" | "high";
+  flags: ScamFlag[];
+  advice: string;
 }

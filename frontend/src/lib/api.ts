@@ -218,8 +218,12 @@ export const api = {
     }),
   markApplied: (applicationId: string) =>
     request<ApplicationOut>(`/api/applications/${applicationId}/mark-applied`, { method: "POST" }),
-  reviewApplication: (applicationId: string, approve: boolean) =>
-    request<ReviewResponse>(`/api/applications/${applicationId}/review`, { method: "POST", body: { approve } }),
+  // acknowledgeRisk: the student confirmed a posting with scam warning signs is genuine.
+  reviewApplication: (applicationId: string, approve: boolean, acknowledgeRisk?: boolean) =>
+    request<ReviewResponse>(`/api/applications/${applicationId}/review`, {
+      method: "POST",
+      body: acknowledgeRisk ? { approve, acknowledge_risk: true } : { approve },
+    }),
 
   listIntegrations: () => request<IntegrationOut[]>("/api/integrations"),
   gmailConnectUrl: () => request<{ auth_url: string }>("/api/integrations/gmail/connect"),

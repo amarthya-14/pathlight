@@ -21,7 +21,8 @@ def _user(client, email):
     return user_id, headers
 
 
-def _ingest_ready(client, monkeypatch, headers, apply_email="careers@reviewco.dev", application_url=None):
+def _ingest_ready(client, monkeypatch, headers, apply_email="careers@reviewco.dev", application_url=None,
+                  raw_text="ReviewCo hiring"):
     extracted = ExtractedOpportunity(
         company_name="ReviewCo",
         role="Backend Intern",
@@ -38,7 +39,7 @@ def _ingest_ready(client, monkeypatch, headers, apply_email="careers@reviewco.de
         confidence=0.85,
     )
     monkeypatch.setattr("app.agents.resume_tailor.get_strong_llm", lambda: FakeLLM(canned_result=tailored))
-    resp = client.post("/api/opportunities/ingest", json={"raw_text": "ReviewCo hiring"}, headers=headers)
+    resp = client.post("/api/opportunities/ingest", json={"raw_text": raw_text}, headers=headers)
     assert resp.status_code == 200
     application_id = resp.json()["application_id"]
     detail = client.get(f"/api/applications/{application_id}", headers=headers).json()
@@ -326,3 +327,40 @@ async def test_post_apply_status_tracking(client, monkeypatch):
 
     bad = client.post(f"/api/applications/{application_id}/status", json={"stage": "DISCOVERED"}, headers=headers)
     assert bad.status_code == 422
+
+
+SCAM_POSTING = (
+    "ReviewCo is hiring Backend Interns! Selected students must pay a refundable security deposit of "
+    "Rs 1,999 via UPI to receive the offer letter."
+)
+
+
+async def test_scam_flags_are_shown_and_high_risk_approval_needs_acknowledgement(client, monkeypatch):
+    configure_oauth(monkeypatch)
+    google = FakeGoogle().install(monkeypatch)
+    user_id, headers = _user(client, "review-scam@example.com")
+    await connect_gmail(user_id)
+    application_id = _ingest_ready(client, monkeypatch, headers, raw_text=SCAM_POSTING)
+
+    detail = client.get(f"/api/applications/{application_id}", headers=headers).json()
+    assert detail["scam_check"]["risk"] == "high"
+    assert {"fee", "upi"} <= {f["code"] for f in detail["scam_check"]["flags"]}
+
+    # Approving without acknowledging is refused and changes nothing
+    resp = client.post(f"/api/applications/{application_id}/review", json={"approve": True}, headers=headers)
+    assert resp.status_code == 409 and "scam warning signs" in resp.json()["detail"]
+    assert google.sent == []
+    detail = client.get(f"/api/applications/{application_id}", headers=headers).json()
+    assert detail["status_history"][-1]["stage"] == "READY_TO_APPLY"
+
+    # Skipping is always allowed; acknowledging lets the student go ahead
+    resp = client.post(
+        f"/api/applications/{application_id}/review", json={"approve": True, "acknowledge_risk": True}, headers=headers
+    )
+    assert resp.status_code == 200 and resp.json()["outcome"] == "applied"
+
+
+async def test_clean_posting_has_no_scam_check(client, monkeypatch):
+    _uid, headers = _user(client, "review-clean@example.com")
+    application_id = _ingest_ready(client, monkeypatch, headers)
+    assert client.get(f"/api/applications/{application_id}", headers=headers).json()["scam_check"] is None
