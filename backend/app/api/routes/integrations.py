@@ -29,6 +29,7 @@ from app.models.integration import Integration
 from app.models.user import User
 from app.schemas.integration import GmailConnectOut, GmailSyncOut, GmailSyncStatus, IntegrationOut
 from app.workers.autopilot import run_autopilot_once
+from app.workers.deadline_reminders import run_deadline_reminders_once
 from app.workers.gmail_poll import poll_all_once, run_manual_sync
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
@@ -37,18 +38,22 @@ internal_router = APIRouter(prefix="/api/internal", include_in_schema=False)
 
 @internal_router.post("/gmail/poll")
 async def cron_gmail_poll(x_cron_secret: str | None = Header(default=None)):
-    """Gate 11: called once a day by .github/workflows/gmail-poll.yml. On a free host
+    """Gate 11: called hourly by .github/workflows/gmail-poll.yml. On a free host
     that sleeps when idle, the request itself wakes the server, then this runs the same
-    poll the in-process loop would have. 404 (not 401/403) when the secret is missing or
+    work the in-process loop would have: deadline reminders every time, the Gmail poll and
+    Autopilot once a day per user. 404 (not 401/403) when the secret is missing or
     wrong, so the route doesn't advertise its existence."""
     if not settings.CRON_SECRET or not x_cron_secret or not hmac.compare_digest(x_cron_secret, settings.CRON_SECRET):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    # First: the 3h reminder can't wait behind a slow Gmail poll.
+    reminders = await run_deadline_reminders_once()
     results = await poll_all_once(only_due=True) if oauth_configured() else {}
     autopilot = await run_autopilot_once()
     return {
         "users_polled": len(results),
         "opportunities_ingested": sum(r.opportunities_ingested for r in results.values()),
         "autopilot_prepared": sum(autopilot.values()),
+        "deadline_reminders_sent": reminders,
     }
 
 

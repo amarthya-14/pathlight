@@ -37,6 +37,7 @@ from app.agents.planner import DEFAULT_HOURS_PER_DAY, compute_available_hours, r
 from app.agents.resume_tailor import run_resume_tailor
 from app.agents.schemas import EligibilityDecision, EligibilityResult, ExtractedOpportunity, SkillGapResult
 from app.agents.skill_gap import run_skill_gap
+from app.core.deadlines import merge_deadline, normalize_deadline
 from app.core.dedupe import role_hash as compute_role_hash
 from app.core.resume_links import drop_dead_anchors, extract_pdf
 from app.core.usage import friendly_llm_error, limit_for, try_consume
@@ -102,6 +103,7 @@ async def _persist_opportunity_node(state: PipelineState) -> PipelineState:
         await company.insert()
 
     hashed_role = compute_role_hash(extraction.role)
+    deadline = normalize_deadline(extraction.deadline)
     requirements = OpportunityRequirements(
         min_cgpa=extraction.min_cgpa,
         allowed_branches=extraction.allowed_branches,
@@ -125,13 +127,15 @@ async def _persist_opportunity_node(state: PipelineState) -> PipelineState:
         opportunity.requirements = requirements
         if len(state["raw_text"] or "") > len(opportunity.description or ""):
             opportunity.description = state["raw_text"][:MAX_DESCRIPTION_CHARS]
+        if opportunity.deadline is None:
+            opportunity.deadline = deadline
         await opportunity.save()
     else:
         opportunity = Opportunity(
             company_id=company.id,
             role=extraction.role,
             role_hash=hashed_role,
-            deadline=extraction.deadline,
+            deadline=deadline,
             source=state["source"],
             requirements=requirements,
             description=(state["raw_text"] or "")[:MAX_DESCRIPTION_CHARS],
@@ -155,8 +159,19 @@ async def _persist_opportunity_node(state: PipelineState) -> PipelineState:
             user_id=PydanticObjectId(state["user_id"]),
             opportunity_id=opportunity.id,
             status_history=[ApplicationStatusEvent(stage=ApplicationStage.DISCOVERED)],
+            deadline=deadline,
+            sources=[state["source"]],
         )
         await application.insert()
+    else:
+        # The same drive again, from another channel (portal email, T&P email, WhatsApp):
+        # one entry, its deadline merged across the copies.
+        merged = merge_deadline(application.deadline, deadline)
+        if merged != application.deadline or state["source"] not in application.sources:
+            application.deadline = merged
+            if state["source"] not in application.sources:
+                application.sources.append(state["source"])
+            await application.save()
 
     state["application_id"] = str(application.id)
     return state
@@ -251,7 +266,8 @@ async def _planner_node(state: PipelineState) -> PipelineState:
         return state
 
     opportunity = await Opportunity.get(PydanticObjectId(state["opportunity_id"]))
-    deadline = opportunity.deadline
+    application = await Application.get(PydanticObjectId(state["application_id"]))
+    deadline = application.deadline or opportunity.deadline
     deadline_aware = None
     if deadline is not None:
         deadline_aware = deadline if deadline.tzinfo else deadline.replace(tzinfo=timezone.utc)
@@ -498,8 +514,11 @@ async def recheck_application(application: Application, job_description: str | N
         )
         opportunity.description = job_description.strip()[:MAX_DESCRIPTION_CHARS]
         if extraction.deadline and opportunity.deadline is None:
-            opportunity.deadline = extraction.deadline
+            opportunity.deadline = normalize_deadline(extraction.deadline)
         await opportunity.save()
+        if extraction.deadline and application.deadline is None:
+            application.deadline = normalize_deadline(extraction.deadline)
+            await application.save()
 
     state: PipelineState = {
         "user_id": user_id,

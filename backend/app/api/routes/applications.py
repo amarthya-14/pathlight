@@ -77,8 +77,9 @@ def build_application_out(application: Application, opportunity: Opportunity | N
         opportunity_id=application.opportunity_id,
         company_name=company.name if company else "Unknown",
         role=opportunity.role if opportunity else "Unknown",
-        deadline=opportunity.deadline if opportunity else None,
+        deadline=application.deadline or (opportunity.deadline if opportunity else None),
         source=opportunity.source if opportunity else None,
+        sources=application.sources,
         apply_email=opportunity.requirements.apply_email if opportunity and opportunity.requirements else None,
         application_url=(
             opportunity.requirements.application_url if opportunity and opportunity.requirements else None

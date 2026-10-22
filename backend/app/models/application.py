@@ -58,6 +58,14 @@ class Application(Document):
     # decision is claimed (see app/api/routes/applications.py::_claim_review) — this is
     # what makes a double-clicked Approve send exactly one email, not two.
     reviewed_at: datetime | None = None
+    # This student's deadline for the drive (app/core/deadlines.py), merged across every
+    # copy they received — kept per student because the shared Opportunity can be the
+    # same company+role at two colleges with different dates. None = use the Opportunity's.
+    deadline: datetime | None = None
+    # Where this student has seen the posting (gmail_mcp, email_forward, whatsapp, manual...).
+    sources: list[str] = Field(default_factory=list)
+    # Deadline reminders already emailed, as reminder_key()s ("24h@<deadline>").
+    reminders_sent: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

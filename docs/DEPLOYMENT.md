@@ -8,7 +8,7 @@ first live deploy pending). Target: free tier end to end, public URL, friends-th
 | Frontend (Next.js) | **Vercel** | Built for Next.js; every pushed branch gets its own preview URL — redesign the UI on a branch, share the preview with friends, merge when it's good. |
 | Backend (FastAPI) | **Render** web service (Docker) | Free, deploys from `render.yaml`, Singapore region. |
 | Database | **MongoDB Atlas M0** | Free 512MB cluster with auth built in (closes `SECURITY.md`'s "local Mongo has no auth" item). |
-| Gmail polling | **GitHub Actions cron** | Free; wakes the sleeping backend once a day (09:00 IST) and triggers the poll. |
+| Background work | **GitHub Actions cron** | Free; wakes the sleeping backend hourly for deadline reminders, and the daily Gmail poll and Autopilot. |
 
 Local/demo fallback remains Docker Compose (`infra/docker/docker-compose.yml`).
 Kubernetes stays out of scope (the "how this scales" viva answer).
@@ -17,8 +17,10 @@ Kubernetes stays out of scope (the "how this scales" viva answer).
 
 - **Render free sleeps after 15 min idle** → first request after a nap takes ~30–60s.
   The in-process Gmail poller can't run while asleep, so `.github/workflows/gmail-poll.yml`
-  calls `POST /api/internal/gmail/poll` (guarded by `CRON_SECRET`) once a day. Users
-  are only polled when their last check is ~a day old, so server wake-ups don't re-poll.
+  calls `POST /api/internal/gmail/poll` (guarded by `CRON_SECRET`) every hour. Each call
+  sends due deadline reminders (24h and 3h before, needs SMTP); users are only polled when
+  their last check is ~a day old, so hourly wake-ups don't re-poll. Waking for ~15 min an
+  hour stays well inside Render's 750 free hours a month.
 - **Render free has an ephemeral disk** — wiped on every restart/redeploy. MongoDB is the
   source of truth; nothing depends on disk surviving:
   - Chroma (resume vectors) is rebuilt lazily per user from the resume text stored in
@@ -99,7 +101,7 @@ push and PR to `main`. Render and Vercel auto-deploy `main` once it's pushed.
 Required:
 1. Render env: `ADMIN_EMAILS` = your email (unlocks `/admin`: users, funnel, AI errors, job sources).
 2. Vercel env: `NEXT_PUBLIC_CONTACT_EMAIL` (shown on /privacy and /terms).
-3. GitHub repo variable `ENABLE_GMAIL_POLL=true` — the daily cron also runs **Autopilot**.
+3. GitHub repo variable `ENABLE_GMAIL_POLL=true` — the hourly cron also runs **Autopilot** (daily) and **deadline reminders**.
 
 Strongly recommended:
 4. **Fresher jobs:** free keys from Adzuna (`ADZUNA_APP_ID`, `ADZUNA_APP_KEY`) and Jooble
@@ -110,9 +112,9 @@ Strongly recommended:
    scopes), add `https://<render-url>/api/auth/google/callback` as a redirect URI, and set
    `GOOGLE_LOGIN_CLIENT_ID/SECRET/REDIRECT_URI`. Without this, sign-in falls back to the Gmail
    client, which is limited to its 100 test users.
-6. **Password reset:** `SMTP_HOST=smtp.gmail.com`, `SMTP_USER`/`SMTP_PASSWORD` (a Gmail App
-   Password on a dedicated account), `SMTP_FROM`. Without it, "Forgot password" points users
-   to Google sign-in.
+6. **Password reset and deadline reminders:** `SMTP_HOST=smtp.gmail.com`, `SMTP_USER`/`SMTP_PASSWORD`
+   (a Gmail App Password on a dedicated account), `SMTP_FROM`. Without it, "Forgot password" points
+   users to Google sign-in, and deadlines show only on the dashboard (no reminder emails).
 
 Before Gmail can leave testing (more than 100 users): Google's restricted-scope verification
 for `gmail.readonly`/`gmail.send` needs the published privacy policy (`/privacy` — it includes

@@ -128,7 +128,7 @@ export default function OpportunitiesPage() {
       <div className="animate-fade-in">
         <PageHeader
           title="Add a job"
-          subtitle="Found a role somewhere else? Paste the job description or placement email — Pathlight extracts the details, checks eligibility, compares skills, plans your prep and tailors your resume."
+          subtitle="Found a role somewhere else? Paste the job description, placement email or WhatsApp message — Pathlight extracts the details, checks eligibility, compares skills, plans your prep and tailors your resume."
         />
       </div>
 
@@ -137,7 +137,7 @@ export default function OpportunitiesPage() {
           <form onSubmit={onSubmit} className="space-y-3">
             <div className="flex items-center justify-between">
               <label htmlFor="jd" className="text-[13px] font-medium text-fg">
-                Job description or email
+                Job description, email or WhatsApp message
               </label>
               <button type="button" onClick={() => setRawText(SAMPLE)} className="text-[13px] text-muted hover:text-fg" disabled={submitting}>
                 Try a sample
@@ -149,7 +149,7 @@ export default function OpportunitiesPage() {
               rows={9}
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
-              placeholder="Paste the full posting — role, company, requirements, eligibility, how to apply…"
+              placeholder="Paste the full posting or message — role, company, eligibility, deadline, how to apply…"
               disabled={submitting}
             />
             <div className="flex flex-wrap items-center justify-between gap-3">

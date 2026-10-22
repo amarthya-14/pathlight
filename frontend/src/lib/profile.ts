@@ -20,6 +20,7 @@ export function profilePayload(profile: ProfileOut | null, patch: Partial<Profil
     autopilot_min_match: profile?.autopilot_min_match ?? 75,
     placement_policy: profile?.placement_policy ?? null,
     current_offer: profile?.current_offer ?? null,
+    deadline_reminders: profile?.deadline_reminders ?? true,
     ...patch,
   };
 }

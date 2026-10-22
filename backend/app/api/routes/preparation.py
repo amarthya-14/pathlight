@@ -53,7 +53,7 @@ async def regenerate_preparation_plan(
         )
 
     opportunity = await Opportunity.get(application.opportunity_id)
-    deadline = opportunity.deadline if opportunity else None
+    deadline = application.deadline or (opportunity.deadline if opportunity else None)
     available_hours = compute_available_hours(deadline, payload.hours_per_day)
 
     plan, _execution = await run_planner(

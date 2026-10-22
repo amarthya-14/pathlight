@@ -74,6 +74,8 @@ class Profile(Document):
     # (app/core/placement.py). Entered by the student: these rules differ by college.
     placement_policy: PlacementPolicy | None = None
     current_offer: HeldOffer | None = None
+    # Email 24h and 3h before an open application's deadline (app/workers/deadline_reminders.py).
+    deadline_reminders: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

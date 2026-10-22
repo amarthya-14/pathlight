@@ -122,7 +122,9 @@ async def test_cron_poll_requires_secret(client, monkeypatch):
 
     resp = client.post("/api/internal/gmail/poll", headers={"X-Cron-Secret": "s3cret-value"})
     assert resp.status_code == 200
-    assert resp.json() == {"users_polled": 1, "opportunities_ingested": 1, "autopilot_prepared": 0}
+    assert resp.json() == {
+        "users_polled": 1, "opportunities_ingested": 1, "autopilot_prepared": 0, "deadline_reminders_sent": 0
+    }
 
 
 async def test_digest_email_becomes_one_opportunity_per_job(client, monkeypatch):

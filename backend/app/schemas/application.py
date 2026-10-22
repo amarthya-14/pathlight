@@ -33,6 +33,8 @@ class ApplicationOut(BaseModel):
     # Gate 10: where the opportunity came from (manual | gmail_mcp | document:*) and how
     # to apply — shown on the review screen so the user sees where an approval will go.
     source: str | None = None
+    # Every channel this student has seen the posting in (deduped into this one entry).
+    sources: list[str] = Field(default_factory=list)
     apply_email: str | None = None
     application_url: str | None = None
     # What the posting asks for in experience (None = it doesn't say / unknown), and

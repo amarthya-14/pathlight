@@ -7,7 +7,7 @@ import { firstName, useRequireAuth } from "@/lib/auth-context";
 import { CountUp, Reveal } from "@/components/Motion";
 import { api } from "@/lib/api";
 import type { ApplicationOut, DashboardHomeOut, IntegrationOut, JobFeedItem } from "@/lib/types";
-import { currentStage, daysUntil, deadlineLabel, deadlineTone } from "@/lib/stages";
+import { closingLabel, currentStage, daysUntil, deadlineTone, seenInLabel } from "@/lib/stages";
 import { ApplicationRow, RowList } from "@/components/ApplicationRow";
 import { Alert, Badge, buttonClasses, Card, CompanyAvatar, EmptyState, PageHeader, PageSkeleton, Progress, SectionLabel, StatCard } from "@/components/ui";
 
@@ -233,18 +233,20 @@ export default function DashboardPage() {
                 <SectionLabel>Closing soon</SectionLabel>
                 <Card className="divide-y divide-line">
                   {data.urgent_deadlines.length === 0 ? (
-                    <p className="p-4 text-[13px] text-muted">Nothing due in the next 14 days.</p>
+                    <p className="p-4 text-[13px] text-muted">Nothing left to apply for in the next 14 days.</p>
                   ) : (
                     data.urgent_deadlines.map((app) => {
                       const days = daysUntil(app.deadline!);
+                      const seenIn = seenInLabel(app.sources);
                       return (
                         <Link key={app.id} href={`/applications/${app.id}`} className="flex items-center gap-3 p-3.5 transition-colors hover:bg-surface-2">
                           <CompanyAvatar name={app.company_name} size="sm" />
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-[13px] font-medium text-fg">{app.company_name}</div>
                             <div className="truncate text-xs text-muted">{app.role}</div>
+                            {seenIn && <div className="truncate text-[11px] text-subtle">{seenIn}</div>}
                           </div>
-                          <Badge tone={deadlineTone(days)}>{deadlineLabel(days)}</Badge>
+                          <Badge tone={deadlineTone(days)}>{closingLabel(app.deadline!)}</Badge>
                         </Link>
                       );
                     })

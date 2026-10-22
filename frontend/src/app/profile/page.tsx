@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Code2, Download, FileText, Link2, Loader2, Sparkles, Trash2, UploadCloud } from "lucide-react";
+import { BellRing, CheckCircle2, Code2, Download, FileText, Link2, Loader2, Sparkles, Trash2, UploadCloud } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth-context";
 import { api, ApiError, saveBlob } from "@/lib/api";
 import type { DocumentOut, ProfileOut } from "@/lib/types";
@@ -362,6 +362,11 @@ export default function ProfilePage() {
         setContextProfile(p);
       }} />
 
+      <DeadlineRemindersCard profile={profile} onSaved={(p) => {
+        setProfile(p);
+        setContextProfile(p);
+      }} />
+
       <PlacementRulesCard profile={profile} onSaved={(p) => {
         setProfile(p);
         setContextProfile(p);
@@ -433,6 +438,53 @@ function AutopilotCard({ profile, onSaved }: { profile: ProfileOut; onSaved: (p:
           aria-label="Autopilot"
           disabled={busy}
           onClick={() => save({ autopilot_enabled: !on })}
+          className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-300 ${on ? "bg-ink" : "bg-line-strong"}`}
+        >
+          <span
+            className={`absolute left-0 top-1 h-5 w-5 rounded-full bg-surface shadow transition-transform duration-300 ${on ? "translate-x-6" : "translate-x-1"}`}
+            style={{ transitionTimingFunction: "var(--ease-out)" }}
+          />
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+function DeadlineRemindersCard({ profile, onSaved }: { profile: ProfileOut; onSaved: (p: ProfileOut) => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const on = profile.deadline_reminders ?? true;
+  const toggle = async () => {
+    setBusy(true);
+    try {
+      onSaved(await api.upsertProfile(profilePayload(profile, { deadline_reminders: !on })));
+      toast(on ? "Deadline reminders off" : "Deadline reminders on");
+    } catch (err) {
+      toast(err instanceof ApiError ? err.detail : "Couldn't save", { tone: "bad" });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card className="mt-6 p-5 sm:p-7">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="max-w-xl">
+          <div className="flex items-center gap-2">
+            <BellRing size={16} className="text-accent" />
+            <h2 className="text-[15px] font-semibold text-fg">Deadline reminders</h2>
+          </div>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
+            An email 24 hours and 3 hours before anything you haven&apos;t applied to closes. A drive that reached you
+            by Gmail, a forwarded email and WhatsApp counts once, with the earliest deadline.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-label="Deadline reminders"
+          disabled={busy}
+          onClick={toggle}
           className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-300 ${on ? "bg-ink" : "bg-line-strong"}`}
         >
           <span
