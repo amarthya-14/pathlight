@@ -57,6 +57,26 @@ export function deadlineLabel(days: number): string {
   return `${days} days left`;
 }
 
+/** "5h left" inside the last day, where a days count would just say "Due today". */
+export function closingLabel(deadline: string): string {
+  const hours = Math.floor((new Date(deadline).getTime() - Date.now()) / 3_600_000);
+  if (hours >= 0 && hours < 24) return hours < 1 ? "Under 1h left" : `${hours}h left`;
+  return deadlineLabel(daysUntil(deadline));
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  gmail_mcp: "Gmail alert",
+  email_forward: "forwarded email",
+  whatsapp: "WhatsApp",
+  manual: "pasted text",
+};
+
+/** "Seen in Gmail alert, WhatsApp" — only worth saying when it came in more than once. */
+export function seenInLabel(sources: string[] | undefined): string | null {
+  const labels = [...new Set((sources ?? []).map((s) => SOURCE_LABELS[s] ?? (s.startsWith("web:") ? "job board" : "uploaded file")))];
+  return labels.length < 2 ? null : `Seen in ${labels.join(", ")}`;
+}
+
 /** Jobs that arrived from a job-alert email — via the Gmail integration or forwarding. */
 export function isAlertSource(source: string | null | undefined): boolean {
   return source === "gmail_mcp" || source === "email_forward";

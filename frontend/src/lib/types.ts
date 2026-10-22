@@ -42,6 +42,7 @@ export type ProfileOut = {
   autopilot_min_match: number;
   autopilot_last_run: string | null;
   extra_skills?: string[];
+  deadline_reminders?: boolean;
 };
 
 export type ProfileUpsert = {
@@ -60,6 +61,7 @@ export type ProfileUpsert = {
   current_offer?: HeldOffer | null;
   autopilot_enabled?: boolean;
   autopilot_min_match?: number;
+  deadline_reminders?: boolean;
 };
 
 export type PostApplyStage = "OA" | "INTERVIEW" | "OFFER" | "REJECTED";
@@ -108,6 +110,8 @@ export type ApplicationOut = {
   role: string;
   deadline: string | null;
   source: string | null;
+  // Every channel this posting reached the student through (deduped into this one entry).
+  sources?: string[];
   apply_email: string | null;
   application_url: string | null;
   min_experience_years: number | null;

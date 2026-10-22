@@ -33,6 +33,7 @@ from app.sources.job_matching import Student, alert_job_unfit, skills_in
 from app.sources.job_signals import user_families
 from app.integrations.google_oauth import GmailNotConnected, oauth_configured
 from app.workers.autopilot import run_autopilot_once
+from app.workers.deadline_reminders import run_deadline_reminders_once
 from app.mcp.gmail_client import mcp_get_message, mcp_list_recent_messages
 from app.models.integration import MAX_PROCESSED_MESSAGE_IDS, Integration
 
@@ -283,4 +284,8 @@ async def run_poll_loop() -> None:
             await run_autopilot_once()
         except Exception:
             logger.exception("autopilot cycle failed")
+        try:
+            await run_deadline_reminders_once()
+        except Exception:
+            logger.exception("deadline reminder cycle failed")
         await asyncio.sleep(min(3600, settings.GMAIL_POLL_INTERVAL_SECONDS))

@@ -20,6 +20,7 @@ class ProfileUpsert(BaseModel):
     autopilot_min_match: int = Field(default=75, ge=50, le=95)
     placement_policy: PlacementPolicy | None = None
     current_offer: HeldOffer | None = None
+    deadline_reminders: bool = True
 
 
 class ProfileOut(BaseModel):
@@ -43,3 +44,4 @@ class ProfileOut(BaseModel):
     extra_skills: list[str] = []
     placement_policy: PlacementPolicy | None = None
     current_offer: HeldOffer | None = None
+    deadline_reminders: bool = True

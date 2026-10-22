@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_current_user
 from app.api.routes.applications import attach_skill_gap_notes, build_application_out, fetch_opportunities_and_companies
+from app.core.deadlines import is_open
 from app.models.application import Application
 from app.models.user import Profile, User
 from app.retrieval.vector_store import user_has_indexed_resume
@@ -46,6 +47,8 @@ async def dashboard_home(current_user: User = Depends(get_current_user)):
     for application_out in all_out:
         if application_out.deadline is None:
             continue
+        if not is_open([e.stage.value for e in application_out.status_history]):
+            continue  # applied, skipped or past applying: nothing left to do before it closes
         deadline = application_out.deadline
         deadline_aware = deadline if deadline.tzinfo else deadline.replace(tzinfo=timezone.utc)
         days_until = (deadline_aware - now).total_seconds() / 86400

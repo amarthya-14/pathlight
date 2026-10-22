@@ -8,6 +8,7 @@ from beanie import PydanticObjectId
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 
 from app.api.deps import get_current_user
+from app.core.deadlines import looks_like_whatsapp
 from app.core.usage import consume_or_429, friendly_llm_error
 from app.graphs.opportunity_pipeline import run_opportunity_pipeline, tailor_in_background
 from app.mcp.filesystem_client import mcp_read_document
@@ -59,6 +60,10 @@ async def ingest_opportunity(
     else:
         raw_text = payload.raw_text
         source = payload.source
+        if source == "manual" and looks_like_whatsapp(raw_text):
+            # Copied out of the placement WhatsApp group — remembered so the deadline digest
+            # can show the drive arrived there too.
+            source = "whatsapp"
 
     await consume_or_429(current_user.id, "analyse")
     result = await run_opportunity_pipeline(raw_text, source, str(current_user.id), defer_tailor=True)

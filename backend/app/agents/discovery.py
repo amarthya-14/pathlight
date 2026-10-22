@@ -8,12 +8,14 @@ touch the database directly; the LangGraph pipeline (app/graphs/opportunity_pipe
 that calls this is responsible for turning the result into Company/Opportunity records.
 """
 import time
+from datetime import datetime
 
 from beanie import PydanticObjectId
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.llm_client import get_small_llm
 from app.agents.schemas import ExtractedOpportunities, ExtractedOpportunity
+from app.core.deadlines import IST
 from app.models.agent_execution import AgentExecution
 
 DISCOVERY_SYSTEM_PROMPT = """You are an information-extraction system for a career \
@@ -36,6 +38,21 @@ address or URL for submitting applications. Never construct one from the company
 (e.g. do not invent careers@company.com). Job-alert digests usually contain a link to the \
 posting — that goes in application_url, not apply_email."""
 
+DEADLINE_RULES = """
+- deadline: the last date (and time) to apply or register, as an ISO-8601 datetime with \
+the +05:30 offset (Indian time) unless the text names another time zone. Today is \
+{today}. A date without a year is its next occurrence; "tomorrow", "tonight" or a weekday \
+count from the message's own date if it shows one (a WhatsApp header like \
+"[20/10/26, 4:05 pm]"), otherwise from today. No time given -> 23:59. Leave it null if no \
+deadline is stated; a drive or interview date is not an application deadline."""
+
+
+def system_prompt(extra: str = "") -> str:
+    """The extraction prompt with today's date, which deadlines like "25 Oct" or
+    "tomorrow 5 PM" can't be read without."""
+    today = datetime.now(IST).strftime("%A %d %B %Y")
+    return DISCOVERY_SYSTEM_PROMPT + DEADLINE_RULES.format(today=today) + extra
+
 
 async def run_discovery(raw_text: str, source: str, user_id: str) -> tuple[ExtractedOpportunity, AgentExecution]:
     """
@@ -55,7 +72,7 @@ async def run_discovery(raw_text: str, source: str, user_id: str) -> tuple[Extra
     try:
         result = await structured_llm.ainvoke(
             [
-                SystemMessage(content=DISCOVERY_SYSTEM_PROMPT),
+                SystemMessage(content=system_prompt()),
                 HumanMessage(content=raw_text),
             ]
         )
@@ -105,7 +122,7 @@ async def run_digest_discovery(raw_text: str, source: str, user_id: str) -> list
     try:
         result = await structured_llm.ainvoke(
             [
-                SystemMessage(content=DISCOVERY_SYSTEM_PROMPT + DIGEST_ADDENDUM.format(max_jobs=MAX_JOBS_PER_EMAIL)),
+                SystemMessage(content=system_prompt(DIGEST_ADDENDUM.format(max_jobs=MAX_JOBS_PER_EMAIL))),
                 HumanMessage(content=raw_text),
             ]
         )
