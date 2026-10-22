@@ -21,6 +21,7 @@ from app.core.application_kit import build_answers, referral_kit
 from app.core.ats import has_skill, score_resume
 from app.core.usage import consume_or_429, friendly_llm_error
 from app.core.resume_pdf import render_resume_pdf
+from app.core.scam_check import ScamCheck, check_opening
 from app.models.user import Profile
 from app.agents.resume_tailor import evidence_text
 from app.graphs.opportunity_pipeline import (
@@ -55,6 +56,15 @@ GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 router = APIRouter(prefix="/api/applications", tags=["applications"])
 
 
+def _scam_check(opportunity: Opportunity | None) -> ScamCheck | None:
+    if opportunity is None:
+        return None
+    req = opportunity.requirements
+    text = "\n".join(t for t in (opportunity.description, req.raw_eligibility_text if req else None) if t)
+    result = check_opening(text, req.apply_email if req else None)
+    return result if result.risk != "none" else None
+
+
 def build_application_out(application: Application, opportunity: Opportunity | None, company: Company | None) -> ApplicationOut:
     # skill_gap_note is NOT stored on Application (see docs/API.md) — recomputed here
     # from current resume-indexed state rather than left stale from ingest time, so a
@@ -78,6 +88,7 @@ def build_application_out(application: Application, opportunity: Opportunity | N
         ),
         # Alert digests give ~3 lines per job; a real JD is paragraphs.
         has_job_description=bool(opportunity and opportunity.description and len(opportunity.description) > 400),
+        scam_check=_scam_check(opportunity),
         eligibility=application.eligibility,
         skill_gap=application.skill_gap,
         skill_gap_note=note,
@@ -389,8 +400,17 @@ async def review_application(
     apply_email = requirements.apply_email if requirements else None
     application_url = requirements.application_url if requirements else None
 
-    # Pre-flight BEFORE claiming, so "connect Gmail first" leaves the application exactly
-    # as it was — the user connects and clicks Approve again.
+    # Pre-flight BEFORE claiming, so these leave the application exactly as it was.
+    scam = _scam_check(opportunity)
+    if payload.approve and scam is not None and scam.risk == "high" and not payload.acknowledge_risk:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This posting shows scam warning signs ("
+            + "; ".join(f.label.lower() for f in scam.flags if f.severity == "high")
+            + "). Confirm you've verified it with the company or your placement cell before approving.",
+        )
+
+    # "Connect Gmail first" also leaves it untouched — the user connects and clicks Approve again.
     if payload.approve and apply_email:
         integration = await get_gmail_integration(str(current_user.id))
         if integration is None or integration.status != "connected" or GMAIL_SEND_SCOPE not in integration.scopes:

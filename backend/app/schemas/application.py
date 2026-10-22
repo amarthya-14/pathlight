@@ -12,6 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agents.schemas import EligibilityResult, SkillGapResult
+from app.core.scam_check import ScamCheck
 from app.models.application import ApplicationStage
 
 
@@ -38,6 +39,8 @@ class ApplicationOut(BaseModel):
     # whether Pathlight has the real job description or only an alert's title+company.
     min_experience_years: float | None = None
     has_job_description: bool = False
+    # Red flags in the posting (fees, UPI, Google Forms...); None when there are none.
+    scam_check: ScamCheck | None = None
     eligibility: EligibilityResult | None
     skill_gap: SkillGapResult | None
     skill_gap_note: str | None = None
@@ -105,6 +108,9 @@ class TailoredEditRequest(BaseModel):
 
 class ReviewRequest(BaseModel):
     approve: bool
+    # Required to approve a posting with high-risk scam flags: the student confirms they
+    # verified it (e.g. on the company's careers page or with the placement cell).
+    acknowledge_risk: bool = False
 
 
 class ReviewResponse(BaseModel):
