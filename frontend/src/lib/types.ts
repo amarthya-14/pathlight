@@ -36,6 +36,8 @@ export type ProfileOut = {
   open_to_remote: boolean;
   expected_ctc_lpa: number | null;
   notice_period: string | null;
+  placement_policy?: PlacementPolicy | null;
+  current_offer?: HeldOffer | null;
   autopilot_enabled: boolean;
   autopilot_min_match: number;
   autopilot_last_run: string | null;
@@ -54,6 +56,8 @@ export type ProfileUpsert = {
   open_to_remote?: boolean;
   expected_ctc_lpa?: number | null;
   notice_period?: string | null;
+  placement_policy?: PlacementPolicy | null;
+  current_offer?: HeldOffer | null;
   autopilot_enabled?: boolean;
   autopilot_min_match?: number;
 };
@@ -337,4 +341,17 @@ export interface ScamCheck {
   risk: "none" | "medium" | "high";
   flags: ScamFlag[];
   advice: string;
+}
+
+/** The student's college rules for students who already hold an offer (on-campus drives only). */
+export interface PlacementPolicy {
+  dream_min_lpa: number | null;
+  super_dream_min_lpa: number | null;
+  /** "any" = no limit, "higher_tier" = only higher-tier drives, "stop" = one offer and done */
+  after_offer: "any" | "higher_tier" | "stop";
+}
+
+export interface HeldOffer {
+  company: string;
+  ctc_lpa: number;
 }

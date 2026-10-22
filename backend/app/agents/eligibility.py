@@ -13,6 +13,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from app.agents.llm_client import get_strong_llm
 from app.agents.schemas import EligibilityDecision, EligibilityResult
 from app.core.branches import branch_allowed
+from app.core.placement import check_offer_rules
 from app.models.agent_execution import AgentExecution
 from app.models.opportunity import OpportunityRequirements
 from app.models.user import Profile
@@ -55,7 +56,7 @@ def _fmt_years(value: float) -> str:
 
 
 def _deterministic_check(
-    requirements: OpportunityRequirements, profile: Profile, role: str | None = None
+    requirements: OpportunityRequirements, profile: Profile, role: str | None = None, description: str | None = None
 ) -> EligibilityResult | None:
     """
     Returns a definitive EligibilityResult if deterministic rules alone can decide, or
@@ -114,10 +115,24 @@ def _deterministic_check(
         else:
             evidence.append(f"Experience requirement met: {_fmt_years(profile.experience_years)} >= {_fmt_years(required)}")
 
-    if hard_fail:
+    # The student's own college rules for students who already hold an offer (on-campus drives only)
+    text = "\n".join(t for t in (description, requirements.raw_eligibility_text) if t)
+    policy_evidence, policy_missing, policy_block = check_offer_rules(
+        profile.placement_policy, profile.current_offer, requirements.compensation, text
+    )
+    evidence += policy_evidence
+    missing += policy_missing
+    if policy_block:
+        evidence.append(policy_block)
+
+    if hard_fail or policy_block:
         return EligibilityResult(
             decision=EligibilityDecision.NOT_ELIGIBLE,
-            reason="A hard eligibility criterion (CGPA, branch or experience) was not met.",
+            reason=(
+                "A hard eligibility criterion (CGPA, branch or experience) was not met."
+                if hard_fail
+                else policy_block
+            ),
             evidence=evidence,
             missing_information=missing,
             confidence=1.0,
@@ -184,10 +199,11 @@ async def run_eligibility(
     user_id: str,
     opportunity_id: str,
     role: str | None = None,
+    description: str | None = None,
 ) -> tuple[EligibilityResult, AgentExecution]:
     start = time.monotonic()
 
-    deterministic_result = _deterministic_check(requirements, profile, role)
+    deterministic_result = _deterministic_check(requirements, profile, role, description)
 
     if deterministic_result is not None:
         # Deterministic path never touches the LLM — this is enforced by simply not

@@ -18,6 +18,8 @@ export function profilePayload(profile: ProfileOut | null, patch: Partial<Profil
     notice_period: profile?.notice_period ?? null,
     autopilot_enabled: profile?.autopilot_enabled ?? false,
     autopilot_min_match: profile?.autopilot_min_match ?? 75,
+    placement_policy: profile?.placement_policy ?? null,
+    current_offer: profile?.current_offer ?? null,
     ...patch,
   };
 }

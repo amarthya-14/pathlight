@@ -1,6 +1,8 @@
 from beanie import PydanticObjectId
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.placement import HeldOffer, PlacementPolicy
+
 
 class ProfileUpsert(BaseModel):
     cgpa: float | None = Field(default=None, ge=0, le=10)
@@ -16,6 +18,8 @@ class ProfileUpsert(BaseModel):
     notice_period: str | None = Field(default=None, max_length=80)
     autopilot_enabled: bool = False
     autopilot_min_match: int = Field(default=75, ge=50, le=95)
+    placement_policy: PlacementPolicy | None = None
+    current_offer: HeldOffer | None = None
 
 
 class ProfileOut(BaseModel):
@@ -37,3 +41,5 @@ class ProfileOut(BaseModel):
     autopilot_min_match: int = 75
     autopilot_last_run: str | None = None
     extra_skills: list[str] = []
+    placement_policy: PlacementPolicy | None = None
+    current_offer: HeldOffer | None = None

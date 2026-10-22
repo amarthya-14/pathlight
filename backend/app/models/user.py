@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from beanie import Document, Indexed, PydanticObjectId
 from pydantic import BaseModel, EmailStr, Field
 
+from app.core.placement import HeldOffer, PlacementPolicy
+
 
 class AiKey(BaseModel):
     provider: str  # gemini | groq | openai | anthropic | custom
@@ -67,6 +69,11 @@ class Profile(Document):
     # Skills the student confirmed they know but their resume doesn't show (ticked on a
     # tailored resume's ATS panel). The Resume Tailor may add these to Technical Skills.
     extra_skills: list[str] = Field(default_factory=list)
+    # The college's rules for students who already hold an offer (dream/super-dream tiers,
+    # one-offer rules) and the offer they hold, if any. Applied only to on-campus drives
+    # (app/core/placement.py). Entered by the student: these rules differ by college.
+    placement_policy: PlacementPolicy | None = None
+    current_offer: HeldOffer | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:
